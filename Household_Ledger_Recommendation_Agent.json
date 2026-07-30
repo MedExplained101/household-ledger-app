@@ -1,0 +1,386 @@
+{
+  "name": "Household Ledger - Recommendation Agent (SCAFFOLD, not deployed)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## SCAFFOLD \u2014 NOT DEPLOYED\nImplements household-ledger-architecture.md \u00a77 (bulk-trip economics) \u2014 the 4th of the 5 planned agents. Unlike the other three scaffolds, no schema extension is needed: `Stores` and `Inventory.cycle_count` are already in household-ledger-sheets-schema.md.\n\nWHY THIS CAN'T PRODUCE REAL OUTPUT YET, EVEN ONCE DEPLOYED: it needs real `Stores.distance_from_home_mi`/`est_trip_cost` data (Open Decision #5 \u2014 manual entry to start, per the doc's own recommendation) and real `Inventory.avg_days_to_finish`/`cycle_count` history, which only accumulates once the Check-In Agent has actually been running for multiple purchase cycles. That's expected \u2014 this is the same 'drafted before its dependencies exist' situation as the other three scaffolds.\n\nV1 SIMPLIFICATION, FLAGGED HONESTLY: architecture.md says trip cost should be 'amortized if the bulk buy covers several months of supply' \u2014 true multi-item trip-bundling (combining several items' savings to justify one trip) is a harder optimization problem than this scaffold solves. V1 rule: recommend only if a SINGLE item's own annual savings already exceeds one round trip's cost on its own \u2014 conservative (will under-recommend relative to true trip-bundling economics), but won't give a false-positive recommendation.\n\nSETUP TODOs: replace `documentId`/credential placeholders; connect Telegram (Open Decision #3, same question as the other Telegram-using scaffolds). The 'show as a badge in the app next to that item' idea in architecture.md \u00a77 step 4 is a src/App.jsx frontend change \u2014 not touched here, flagged as a separate follow-on task.",
+        "height": 560,
+        "width": 480
+      },
+      "id": "note-1",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1400,
+        -520
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 7,
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "trigger-1",
+      "name": "Weekly Recommendation Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1400,
+        0
+      ],
+      "notes": "Weekly, per architecture.md \u00a77 ('weekly or monthly is plenty, this doesn't need daily'). Change daysInterval to 30 for monthly if preferred."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Catalog",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-catalog",
+      "name": "Get Catalog",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1180,
+        -120
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-stores",
+      "name": "Get Stores",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1180,
+        60
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Inventory",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-inventory",
+      "name": "Get Inventory",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1180,
+        240
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-sources",
+      "name": "Merge Catalog + Stores + Inventory",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -960,
+        60
+      ],
+      "notes": "Same join pattern as the existing Webhook Agent's 'Merge List + Settings' node."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Bulk-trip economics per architecture.md \u00a77, with the confidence gate from the same section:\n// 8 completed cycles before a recommendation is 'reliable' rather than 'provisional'.\nconst RELIABLE_CYCLE_THRESHOLD = 8;\n\n// $input.all() holds three parallel branches merged combineAll: Catalog rows, then Stores\n// rows, then Inventory rows, in that order (mirrors how the existing Webhook Agent reads\n// its two merged branches via named-node lookups rather than trusting input order).\nconst catalogRows = $('Get Catalog').all().map(i => i.json);\nconst storeRows = $('Get Stores').all().map(i => i.json);\nconst inventoryRows = $('Get Inventory').all().map(i => i.json);\n\nconst storeByName = new Map(storeRows.map(s => [s.store, s]));\nconst inventoryByItem = new Map(inventoryRows.map(r => [r.item, r]));\n\nconst unitPriceOf = (row) => {\n  const up = Number(row.unit_price);\n  if (up > 0) return up;\n  const p = Number(row.price);\n  return p > 0 ? p : null; // falls back to raw price if no unit_price, same convention as the app's priceOf()\n};\n\n// Group Catalog rows by item\nconst byItem = new Map();\nfor (const row of catalogRows) {\n  if (!byItem.has(row.item)) byItem.set(row.item, []);\n  byItem.get(row.item).push(row);\n}\n\nconst recommendations = [];\n\nfor (const [item, rows] of byItem.entries()) {\n  if (rows.length < 2) continue; // needs at least two stores to compare\n  const inv = inventoryByItem.get(item);\n  const avgDaysToFinish = inv ? Number(inv.avg_days_to_finish) : null;\n  if (!avgDaysToFinish || avgDaysToFinish <= 0) continue; // no consumption-rate data yet\n  const cycleCount = inv ? (Number(inv.cycle_count) || 0) : 0;\n  const annualQty = 365 / avgDaysToFinish;\n\n  const withStoreInfo = rows\n    .map(r => ({ ...r, _unitPrice: unitPriceOf(r), _store: storeByName.get(r.store) }))\n    .filter(r => r._unitPrice != null && r._store && Number(r._store.distance_from_home_mi) >= 0);\n  if (withStoreInfo.length < 2) continue;\n\n  withStoreInfo.sort((a, b) => Number(a._store.distance_from_home_mi) - Number(b._store.distance_from_home_mi));\n  const near = withStoreInfo[0];\n\n  for (const bulk of withStoreInfo.slice(1)) {\n    if (bulk._unitPrice >= near._unitPrice) continue; // not actually cheaper \u2014 no recommendation\n    const annualSavings = (near._unitPrice - bulk._unitPrice) * annualQty;\n    const tripCost = Number(bulk._store.est_trip_cost) || 0;\n    // V1 simplification (see Setup Notes): single-item annual savings must clear one trip's\n    // cost on its own \u2014 conservative, doesn't credit trip-bundling across multiple items.\n    if (annualSavings <= tripCost) continue;\n\n    recommendations.push({\n      item,\n      nearStore: near.store,\n      bulkStore: bulk.store,\n      annualSavings: Math.round(annualSavings * 100) / 100,\n      tripCost,\n      cycleCount,\n      reliable: cycleCount >= RELIABLE_CYCLE_THRESHOLD,\n    });\n  }\n}\n\nreturn recommendations.map(r => ({ json: r }));"
+      },
+      "id": "code-compute-recommendations",
+      "name": "Compute Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -740,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Guarantees exactly one output item regardless of how many recommendations came out of\n// the previous node (including zero) \u2014 an If/Switch node given zero input items fires on\n// NEITHER branch in n8n, which would silently swallow the 'nothing to recommend' case if\n// this check node weren't here. A Code node in 'Run Once for All Items' mode always runs.\nconst items = $input.all().map(i => i.json);\nreturn [{ json: { hasRecommendations: items.length > 0, items } }];"
+      },
+      "id": "code-check-any",
+      "name": "Check For Recommendations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.hasRecommendations }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-any-recommendations",
+      "name": "Any Recommendations?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -300,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Same caution-icon convention already used in the app for missing pack sizes\n// (household-ledger-architecture.md \u00a77's 'Confidence gate' section), applied here to\n// data maturity instead: below-threshold recommendations get a \u26a0\ufe0f provisional caveat,\n// at-threshold-or-above ones are stated plainly.\nconst RELIABLE_CYCLE_THRESHOLD = 8;\nconst lines = $json.items.map(r => {\n  const caveat = r.reliable\n    ? ''\n    : ` (\\u26A0\\uFE0F provisional \\u2014 based on ${r.cycleCount} of ${RELIABLE_CYCLE_THRESHOLD} purchase cycles)`;\n  return `${r.item}: ${r.nearStore} \\u2192 ${r.bulkStore} could save ~$${r.annualSavings.toFixed(2)}/yr `\n    + `(trip cost $${r.tripCost.toFixed(2)})${caveat}`;\n});\nconst text = `\\uD83D\\uDCE6 Bulk-trip recommendations this week:\\n\\n${lines.join('\\n')}`;\nreturn [{ json: { text } }];"
+      },
+      "id": "code-format-message",
+      "name": "Format Recommendations Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "REPLACE_WITH_TELEGRAM_CHAT_ID",
+        "operation": "sendMessage",
+        "text": "={{ $json.text }}"
+      },
+      "id": "telegram-send-recommendations",
+      "name": "Send Recommendations",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        140,
+        -20
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_BOT_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "noop-nothing-to-recommend",
+      "name": "Nothing to Recommend This Week",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        160
+      ]
+    }
+  ],
+  "connections": {
+    "Weekly Recommendation Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Catalog",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Stores",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Catalog": {
+      "main": [
+        [
+          {
+            "node": "Merge Catalog + Stores + Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stores": {
+      "main": [
+        [
+          {
+            "node": "Merge Catalog + Stores + Inventory",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Inventory": {
+      "main": [
+        [
+          {
+            "node": "Merge Catalog + Stores + Inventory",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Catalog + Stores + Inventory": {
+      "main": [
+        [
+          {
+            "node": "Compute Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Check For Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check For Recommendations": {
+      "main": [
+        [
+          {
+            "node": "Any Recommendations?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Recommendations?": {
+      "main": [
+        [
+          {
+            "node": "Format Recommendations Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nothing to Recommend This Week",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Recommendations Message": {
+      "main": [
+        [
+          {
+            "node": "Send Recommendations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false,
+  "triggerCount": 1,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
