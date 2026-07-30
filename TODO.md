@@ -42,7 +42,7 @@ Based on gaps visible in the current README and project setup:
 
 - [x] ~~Move `WEBHOOK_URL` out of `src/App.jsx` and into an environment variable~~ — done 2026-07-30: reads `VITE_WEBHOOK_URL` with a fallback to the current production URL, `.env.example` added, `.gitignore` added (didn't exist before — also now protects against ever committing a real `.env`).
 - [x] ~~Add a basic CI check (lint/build)~~ — done 2026-07-30: `.github/workflows/ci.yml` runs `npm ci`, `npm run lint`, `npm run build` on every push/PR. Added a standard flat ESLint config (matching Vite's own React template) and fixed the pre-existing lint errors it surfaced (unused imports/vars, unescaped JSX apostrophes) so lint actually passes clean. One harmless warning remains (a `useCallback` exhaustive-deps notice) — left alone deliberately since a mechanical fix risked an infinite-effect-loop regression; warnings don't fail the CI job.
-- [ ] Add at least a smoke test for the app's core ledger flow — there is currently no test setup in `package.json`.
+- [x] ~~Add at least a smoke test for the app's core ledger flow~~ — done 2026-07-30: added Vitest + React Testing Library (`src/App.test.jsx`, `src/setupTests.js`, `test` config block in `vite.config.js`). The test mocks the webhook (`global`/`fetch`), renders the app, clicks a catalog item, and asserts it lands in the list with the subtotal updated — covering the real add-item round trip through `callWebhook`/`applyServerState`, not just a render smoke check. `npm test` now also runs in CI (`.github/workflows/ci.yml`), before the build step.
 - [ ] Decide on and document one canonical deploy path (Netlify vs Vercel) — the README currently presents both as equally valid, which can lead to drift between two live deployments.
 
 ---
