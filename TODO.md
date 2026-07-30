@@ -41,7 +41,7 @@ Per `CLAUDE.md`, the intended architecture is a fleet of n8n workflows modeled o
 Based on gaps visible in the current README and project setup:
 
 - [x] ~~Move `WEBHOOK_URL` out of `src/App.jsx` and into an environment variable~~ — done 2026-07-30: reads `VITE_WEBHOOK_URL` with a fallback to the current production URL, `.env.example` added, `.gitignore` added (didn't exist before — also now protects against ever committing a real `.env`).
-- [ ] Add a basic CI check (lint/build) so a broken `npm run build` is caught before Netlify/Vercel deploy rather than at drag-and-drop time.
+- [x] ~~Add a basic CI check (lint/build)~~ — done 2026-07-30: `.github/workflows/ci.yml` runs `npm ci`, `npm run lint`, `npm run build` on every push/PR. Added a standard flat ESLint config (matching Vite's own React template) and fixed the pre-existing lint errors it surfaced (unused imports/vars, unescaped JSX apostrophes) so lint actually passes clean. One harmless warning remains (a `useCallback` exhaustive-deps notice) — left alone deliberately since a mechanical fix risked an infinite-effect-loop regression; warnings don't fail the CI job.
 - [ ] Add at least a smoke test for the app's core ledger flow — there is currently no test setup in `package.json`.
 - [ ] Decide on and document one canonical deploy path (Netlify vs Vercel) — the README currently presents both as equally valid, which can lead to drift between two live deployments.
 
