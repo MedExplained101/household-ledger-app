@@ -1,0 +1,182 @@
+{
+  "name": "Household Ledger - Budget Alert Listener (SCAFFOLD, not deployed)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## SCAFFOLD \u2014 NOT DEPLOYED\nModeled on the pattern in household-ledger-architecture.md \u00a73: 'always-on, mirrors the Telegram Approval Listener. After each list update, if over budget, message Graham/Rutendo via Telegram.'\n\nHOW THIS GETS CALLED: this workflow is a sub-workflow, not its own trigger. Wire an 'Execute Workflow' node into Household_Ledger_List_Budget_Webhook_Agent.json immediately after its 'Compute Totals' node, passing { total, budget, remaining, cadence } as input. This is the same sub-workflow-call shape used elsewhere in the existing n8n fleet (e.g. ME101's 'SELECT_ME_AFTER_IMPORT' sub-workflow pattern) rather than inventing a new shape.\n\nSETUP TODOs:\n1. Add the 'Execute Workflow' node to the List/Budget Webhook Agent (not done here \u2014 that file isn't touched by this scaffold, to avoid modifying something you may already be editing).\n2. Connect a Telegram bot credential + chat ID (REPLACE_WITH_ placeholders below). Open Decision #3 (architecture.md \u00a78): reuse the existing Beautiful Nature Scenes Approval bot/chat, or a separate bot for household purchases?\n\nNOT BUILT (deliberately, see architecture.md \u00a73's own 'could optionally' wording): the YES/NO-style pause/resume reply loop (e.g. 'OK keep going over' vs 'trim it'). This scaffold is one-way notification only \u2014 a v2 could add a Wait node + reply-router workflow, same shape as the Check-In Agent's pause/resume pair, if Graham wants that later.",
+        "height": 480,
+        "width": 460
+      },
+      "id": "note-1",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -900,
+        -420
+      ]
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "total",
+              "type": "number"
+            },
+            {
+              "name": "budget",
+              "type": "number"
+            },
+            {
+              "name": "remaining",
+              "type": "number"
+            },
+            {
+              "name": "cadence",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "trigger-execute-workflow",
+      "name": "Called from Webhook Agent",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -900,
+        0
+      ],
+      "notes": "Entry point when called as a sub-workflow from Household_Ledger_List_Budget_Webhook_Agent.json's Compute Totals step."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.remaining }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-over-budget",
+      "name": "Over Budget?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { total, budget, remaining, cadence } = $input.first().json;\nconst over = Math.abs(remaining).toFixed(2);\nconst text = `\\u26A0\\uFE0F Household Ledger: $${total.toFixed(2)} of your $${budget.toFixed(2)} ${String(cadence || '').toLowerCase()} budget spent \\u2014 $${over} over.`;\nreturn [{ json: { text } }];"
+      },
+      "id": "code-format-message",
+      "name": "Format Alert Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "REPLACE_WITH_TELEGRAM_CHAT_ID",
+        "operation": "sendMessage",
+        "text": "={{ $json.text }}"
+      },
+      "id": "telegram-alert",
+      "name": "Send Budget Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        -60
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_BOT_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "noop-within-budget",
+      "name": "Within Budget - No Alert",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -460,
+        100
+      ]
+    }
+  ],
+  "connections": {
+    "Called from Webhook Agent": {
+      "main": [
+        [
+          {
+            "node": "Over Budget?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Over Budget?": {
+      "main": [
+        [
+          {
+            "node": "Format Alert Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Within Budget - No Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Alert Message": {
+      "main": [
+        [
+          {
+            "node": "Send Budget Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false,
+  "triggerCount": 0,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

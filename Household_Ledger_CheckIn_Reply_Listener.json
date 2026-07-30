@@ -1,0 +1,357 @@
+{
+  "name": "Household Ledger - Check-In Reply Listener (SCAFFOLD, not deployed)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## SCAFFOLD \u2014 NOT DEPLOYED\nCompanion to Household_Ledger_CheckIn_Agent.json \u2014 must run 24/7 alongside it, same as how BNS's Telegram Approval Listener runs alongside its main content workflow. Node shape below is a direct adaptation of beautifulnaturescenes-/beautiful_naturescenes_telegram_approval_listener_workflow.json (read directly to reuse the real pattern rather than inventing a new one) \u2014 swapped from YES/NO parsing to the LOW:/FINISHED: list format the Check-In Agent's message asks for.\n\nSETUP TODOs:\n1. Connect the same Telegram bot credential as the Check-In Agent (Open Decision #3 \u2014 same bot as BNS's Approval bot, or a separate household one?).\n2. Connect a Google Sheets credential + real spreadsheet ID.\n3. Replace the chat-ID filter with the real household chat.\n\nHOW IT WORKS: fires on every message to the bot, filters to the household chat, parses LOW:/FINISHED:/NONE replies, reads Settings for a pending CheckIn_ResumeURL, and POSTs the parsed lists to that URL \u2014 waking the paused Check-In Agent execution.",
+        "height": 480,
+        "width": 460
+      },
+      "id": "note-1",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1000,
+        -420
+      ]
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ]
+      },
+      "id": "telegram-trigger",
+      "name": "Listen for Check-In Reply",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1000,
+        100
+      ],
+      "notes": "Fires on every message to the bot, from anyone. The next node filters to the household chat ID only."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.message.chat.id }}",
+              "rightValue": "REPLACE_WITH_TELEGRAM_CHAT_ID",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-correct-chat",
+      "name": "From Household Chat?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -780,
+        100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "noop-wrong-chat",
+      "name": "Ignore - Wrong Chat",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parses 'LOW: item, item' / 'FINISHED: item, item' / 'NONE' replies.\n// Same normalize-then-validate shape as BNS's Parse Reply node, adapted from a single\n// YES/NO check to two labeled comma-separated lists.\nconst msg = $input.first().json.message;\nconst text = (msg.text || '').trim();\nconst chatId = msg.chat.id;\n\nif (/^none$/i.test(text)) {\n  return [{ json: { chatId, isValidReply: true, lowItems: [], finishedItems: [] } }];\n}\n\nconst lowMatch = text.match(/LOW:\\s*(.+?)(?:\\n|$)/i);\nconst finishedMatch = text.match(/FINISHED:\\s*(.+?)(?:\\n|$)/i);\nconst splitList = (m) => (m ? m[1].split(',').map(s => s.trim()).filter(Boolean) : []);\n\nconst lowItems = splitList(lowMatch);\nconst finishedItems = splitList(finishedMatch);\nconst isValidReply = Boolean(lowMatch || finishedMatch);\n\nreturn [{ json: { chatId, isValidReply, lowItems, finishedItems } }];"
+      },
+      "id": "code-parse-reply",
+      "name": "Parse Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.isValidReply }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-valid-reply",
+      "name": "Valid Format?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "operation": "sendMessage",
+        "text": "Reply with LOW: item, item / FINISHED: item, item (either line optional), or NONE if nothing changed."
+      },
+      "id": "telegram-nudge",
+      "name": "Nudge - Invalid Format",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -120,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Settings",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-settings",
+      "name": "Get Settings",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -120,
+        -80
+      ],
+      "notes": "Uses the proposed CheckIn_Status/CheckIn_ResumeURL Settings schema extension \u2014 see Setup Notes.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.CheckIn_Status }}",
+              "rightValue": "pending",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-found-pending",
+      "name": "Found Pending Check-In?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        100,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Reply').first().json.chatId }}",
+        "operation": "sendMessage",
+        "text": "No check-in waiting right now \u2014 nothing to update."
+      },
+      "id": "telegram-no-pending",
+      "name": "No Pending Check-In",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        320,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.CheckIn_ResumeURL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"lowItems\": $('Parse Reply').first().json.lowItems, \"finishedItems\": $('Parse Reply').first().json.finishedItems } }}"
+      },
+      "id": "http-call-resume",
+      "name": "Call Resume Webhook",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        -180
+      ],
+      "notes": "Wakes the paused 'Wait for Check-In Reply' node in the Check-In Agent, feeding it { lowItems, finishedItems }."
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse Reply').first().json.chatId }}",
+        "operation": "sendMessage",
+        "text": "Got it \u2014 updating inventory now."
+      },
+      "id": "telegram-ack",
+      "name": "Acknowledge Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        540,
+        -180
+      ],
+      "notes": "Lightweight ack \u2014 the Check-In Agent sends its own fuller confirmation once it finishes processing."
+    }
+  ],
+  "connections": {
+    "Listen for Check-In Reply": {
+      "main": [
+        [
+          {
+            "node": "From Household Chat?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "From Household Chat?": {
+      "main": [
+        [
+          {
+            "node": "Parse Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignore - Wrong Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reply": {
+      "main": [
+        [
+          {
+            "node": "Valid Format?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Format?": {
+      "main": [
+        [
+          {
+            "node": "Get Settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Nudge - Invalid Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Settings": {
+      "main": [
+        [
+          {
+            "node": "Found Pending Check-In?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Found Pending Check-In?": {
+      "main": [
+        [
+          {
+            "node": "Call Resume Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Pending Check-In",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Resume Webhook": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false,
+  "triggerCount": 1,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
