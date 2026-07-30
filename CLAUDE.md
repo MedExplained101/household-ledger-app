@@ -21,8 +21,8 @@ Amazon for extras) — not an in-person multi-stop route anymore.
 (07/10–07/19/2026). Categorized (Produce, Meat, Dairy, Pantry, Frozen,
 Snacks, Household, Beverages, Prepared/Deli, Seafood, Bakery,
 Health/Supplements), with pack size and $/lb or $/ct computed only where
-the receipt actually printed a size. **Not yet in this repo — referenced by
-this doc and the schema doc, but the actual CSV hasn't been supplied yet.**
+the receipt actually printed a size. Now checked into this repo as
+`purchase_history.csv` — not yet loaded into the `Catalog` sheet tab (see `TODO.md`).
 
 ## Key known limitation — do not silently "fix" this
 Costco and Walmart receipts almost never share an exact item name, and most
@@ -34,7 +34,6 @@ caution icon (⚠️) on these items — this is intentional product behavior,
 not a bug to clean up.
 
 ## Architecture (see household-ledger-architecture.md for full detail)
-**Not yet in this repo** — referenced throughout this doc but not yet supplied.
 - **Data layer**: one Google Sheet, tabs = `Catalog`, `ShoppingList`,
   `Settings`, `PriceLog`, `Inventory`, `Stores` (see
   household-ledger-sheets-schema.md for exact columns).
