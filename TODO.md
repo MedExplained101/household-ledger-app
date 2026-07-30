@@ -40,7 +40,7 @@ Per `CLAUDE.md`, the intended architecture is a fleet of n8n workflows modeled o
 
 Based on gaps visible in the current README and project setup:
 
-- [ ] Move `WEBHOOK_URL` out of `src/App.jsx` and into an environment variable — it's currently hardcoded in source, which makes rotating the n8n webhook or open-sourcing the repo harder than it needs to be.
+- [x] ~~Move `WEBHOOK_URL` out of `src/App.jsx` and into an environment variable~~ — done 2026-07-30: reads `VITE_WEBHOOK_URL` with a fallback to the current production URL, `.env.example` added, `.gitignore` added (didn't exist before — also now protects against ever committing a real `.env`).
 - [ ] Add a basic CI check (lint/build) so a broken `npm run build` is caught before Netlify/Vercel deploy rather than at drag-and-drop time.
 - [ ] Add at least a smoke test for the app's core ledger flow — there is currently no test setup in `package.json`.
 - [ ] Decide on and document one canonical deploy path (Netlify vs Vercel) — the README currently presents both as equally valid, which can lead to drift between two live deployments.

@@ -3,7 +3,11 @@ import { Plus, Minus, X, ChevronDown, AlertTriangle, Search, RefreshCw, WifiOff 
 
 // Your n8n production webhook — the mobile app never touches Google Sheets
 // directly, it POSTs actions here and the workflow reads/writes ShoppingList + Settings.
-const WEBHOOK_URL = "https://medexplained101.app.n8n.cloud/webhook/household-ledger-list";
+// Set VITE_WEBHOOK_URL in your hosting provider's env vars to rotate this without a
+// code change (see .env.example). Falls back to the current production URL if unset.
+const WEBHOOK_URL =
+  import.meta.env.VITE_WEBHOOK_URL ||
+  "https://medexplained101.app.n8n.cloud/webhook/household-ledger-list";
 
 // ---------------------------------------------------------------------------
 // CATALOG — built from parsed Costco + Walmart receipts (Alpharetta / Milton, GA)

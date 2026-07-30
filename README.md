@@ -26,6 +26,8 @@ If you're using Claude Code, just point it at this folder and ask it to run the
 build and deploy steps above — it can run these commands directly in your terminal.
 
 ## Notes
-- The webhook URL is hardcoded in `src/App.jsx` (`WEBHOOK_URL` near the top) — already
-  set to your production n8n URL.
+- The webhook URL defaults to the current production n8n URL, but can be overridden
+  without a code change via a `VITE_WEBHOOK_URL` environment variable — see
+  `.env.example`. Set it in Netlify/Vercel's dashboard (or a local `.env` file) if you
+  ever need to rotate the webhook.
 - `public/manifest.json` makes it installable as a home-screen PWA on iOS/Android.
