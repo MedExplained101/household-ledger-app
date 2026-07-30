@@ -1,0 +1,79 @@
+item,category,store,price,unit_price,size,unit_label,last_updated,confidence
+Watermelon,Produce,Costco,6.99,,,,2026-06-21,receipt
+Bananas,Produce,Costco,1.49,,,,2026-06-21,receipt
+Oranges,Produce,Costco,5.62,,,,2026-06-21,receipt
+Pineapple,Produce,Costco,2.99,,,,2026-06-21,receipt
+Strawberries,Produce,Costco,6.39,,,,2026-06-21,receipt
+Blueberries,Produce,Costco,4.89,,,,2026-06-21,receipt
+Raspberries,Produce,Costco,3.94,,,,2026-06-21,receipt
+Green Grapes,Produce,Costco,5.39,,,,2026-06-21,receipt
+"Apples, 3lb Org Gala",Produce,Costco,4.69,1.56,3lb,$/lb,2026-06-21,receipt
+"Potatoes, 10lb Bakers",Produce,Costco,4.84,0.48,10lb,$/lb,2026-06-21,receipt
+"Potatoes, 3.5lb",Produce,Costco,4.99,1.43,3.5lb,$/lb,2026-06-21,receipt
+Mushrooms,Produce,Costco,3.99,,,,2026-06-21,receipt
+Mushrooms,Produce,Walmart,2.18,4.36,8oz,$/lb,2026-07-19,receipt
+Romaine,Produce,Costco,5.89,,,,2026-06-21,receipt
+Sweet Corn,Produce,Costco,4.99,,,,2026-06-21,receipt
+Grape Tomato,Produce,Costco,6.29,,,,2026-06-21,receipt
+"Bell Peppers, 3ct",Produce,Walmart,2.97,0.99,3ct,$/pepper,2026-07-19,receipt
+"Collard Greens, bunch",Produce,Walmart,2.47,,,,2026-07-19,receipt
+"Carrots, 2lb",Produce,Walmart,2.26,1.13,2lb,$/lb,2026-07-19,receipt
+"Avocados, 5-6ct bag",Produce,Walmart,3.48,,,,2026-07-19,receipt
+"Cabbage, each",Produce,Walmart,2.79,,,,2026-07-19,receipt
+Cucumbers,Produce,Costco,6.49,,,,2026-06-21,receipt
+Cucumbers,Produce,Walmart,2.08,2.08,16oz,$/lb,2026-07-19,receipt
+Green Onions,Produce,Costco,5.99,,,,2026-06-21,receipt
+Green Onions,Produce,Walmart,1.07,,,,2026-07-19,receipt
+Whole Milk,Dairy,Costco,3.68,,,,2026-06-21,receipt
+Whole Milk,Dairy,Walmart,3.12,,1gal,,2026-07-19,receipt
+Eggs,Dairy,Costco,8.39,0.14,5dz (60ct),$/egg,2026-06-21,receipt
+Eggs,Dairy,Walmart,4.32,0.12,36ct,$/egg,2026-07-19,receipt
+Butter,Dairy,Costco,10.49,,,,2026-06-21,receipt
+Butter,Dairy,Walmart,3.06,3.06,16oz,$/lb,2026-07-19,receipt
+"Greek Yogurt Tub, 32oz",Dairy,Walmart,3.28,1.64,32oz,$/lb,2026-07-19,receipt
+"Yogurt Variety Pack, 8ct",Dairy,Walmart,4.96,0.62,8ct,$/cup,2026-07-19,receipt
+Shredded Cheese,Dairy,Costco,12.49,,,,2026-06-21,receipt
+Heavy Cream,Dairy,Costco,4.39,,,,2026-06-21,receipt
+Heavy Cream,Dairy,Walmart,2.96,,16oz,,2026-07-19,receipt
+Ground Beef,Meat,Costco,36.84,,,,2026-06-21,receipt
+Ground Beef,Meat,Walmart,8.97,8.97,1lb,$/lb,2026-07-19,receipt
+Chicken Drumsticks,Meat,Costco,6.43,,,,2026-06-21,receipt
+"Chicken Leg Quarters, 10lb",Meat,Walmart,8.72,0.87,10lb,$/lb,2026-07-19,receipt
+Fryer Thighs,Meat,Costco,11.59,,,,2026-06-21,receipt
+Whole Fryer Chicken,Meat,Costco,12.98,,,,2026-06-21,receipt
+"Bacon, 16oz",Meat,Walmart,6.97,6.97,16oz,$/lb,2026-07-19,receipt
+Bratwurst,Meat,Costco,12.89,,,,2026-06-21,receipt
+Pork Ribs (St. Louis),Meat,Costco,34.06,,,,2026-06-21,receipt
+Pork Rib Pieces,Meat,Walmart,10.98,,2.2–3.15lb,,2026-07-19,receipt
+Rotisserie Chicken,Prepared,Costco,4.99,,,,2026-06-21,receipt
+Shrimp,Seafood,Costco,15.44,,,,2026-06-21,receipt
+Basmati Rice,Pantry,Costco,21.99,,,,2026-06-21,receipt
+Basmati Rice,Pantry,Walmart,9.52,1.9,5lb,$/lb,2026-07-19,receipt
+"Bread Flour, 5lb",Pantry,Walmart,3.93,0.79,5lb,$/lb,2026-07-19,receipt
+Peanut Butter,Pantry,Costco,9.89,,,,2026-06-21,receipt
+Olive Oil,Pantry,Costco,10.79,,,,2026-06-21,receipt
+Oatmeal,Pantry,Costco,7.99,,,,2026-06-21,receipt
+Oatmeal,Pantry,Walmart,2.98,2.65,18oz,$/lb,2026-07-19,receipt
+"Kidney Beans, 1lb",Pantry,Walmart,1.22,1.22,1lb,$/lb,2026-07-19,receipt
+"Black Beans, 1lb",Pantry,Walmart,1.5,1.5,1lb,$/lb,2026-07-19,receipt
+Tomato Paste,Pantry,Walmart,1.36,,,,2026-07-19,receipt
+"Sardines, 3.75oz can",Pantry,Walmart,1.12,1.12,3.75oz/can,$/can,2026-07-19,receipt
+Cheerios,Pantry,Costco,4.89,,,,2026-06-21,receipt
+Organic Chia,Pantry,Costco,8.99,,,,2026-06-21,receipt
+Organic Pasta,Pantry,Costco,10.79,,,,2026-06-21,receipt
+Pecans,Pantry,Costco,14.99,,,,2026-06-21,receipt
+Pecans,Pantry,Walmart,3.82,15.28,4oz,$/lb,2026-07-19,receipt
+Mayonnaise,Pantry,Walmart,3.97,3.97,16oz,$/lb,2026-07-19,receipt
+Bouillon,Pantry,Walmart,2.54,,7.9oz,,2026-07-19,receipt
+"Frozen Broccoli, 10.8oz",Frozen,Walmart,1.87,2.77,10.8oz,$/lb,2026-07-19,receipt
+"Frozen Corn, 12oz",Frozen,Walmart,0.98,1.31,12oz,$/lb,2026-07-19,receipt
+Ice Pops,Frozen,Costco,8.74,,,,2026-06-21,receipt
+Simply/Fresh OJ,Beverages,Costco,10.99,,,,2026-06-21,receipt
+Simply/Fresh OJ,Beverages,Walmart,4.46,,52fl oz,,2026-07-19,receipt
+"SunnyD, 1gal",Beverages,Walmart,3.68,,,,2026-07-19,receipt
+Potato Chips,Snacks,Costco,7.79,2.02,61.6oz,$/lb,2026-06-21,receipt
+Potato Chips,Snacks,Walmart,1.5,3,8oz,$/lb,2026-07-19,receipt
+Bath Tissue,Household,Costco,20.99,,,,2026-06-21,receipt
+Kitchen Cleaner,Household,Walmart,3.97,,,,2026-07-19,receipt
+Copy Paper,Household,Walmart,5.77,,,,2026-07-19,receipt
+"Toothbrushes, 4pk",Household,Walmart,2.96,,,,2026-07-19,receipt
