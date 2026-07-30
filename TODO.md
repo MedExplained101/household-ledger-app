@@ -4,17 +4,33 @@ This file tracks outstanding work for the Household Ledger app so it can be foll
 
 ## Status
 
-A search of this repo (2026-07-30) found **no existing plans, strategy docs, work logs, or `TODO`/`FIXME` comments** — the only documentation is `README.md`, and the codebase (`src/App.jsx`, `src/main.jsx`, etc.) has no inline TODO markers. A follow-up search of Google Drive (2026-07-30) found a related, **not-yet-connected backend workflow** — see below. This file is a fresh starting point, not a consolidation of prior notes.
+A search of this repo (2026-07-30) found **no existing plans, strategy docs, work logs, or `TODO`/`FIXME` comments** at the time — only `README.md`, with no inline TODO markers in code. A follow-up Google Drive sweep found a related, not-yet-connected backend workflow, and the user has since supplied the project's actual `CLAUDE.md` primer, sheets schema, and n8n workflow JSON directly — all now checked into this repo. This file is the actionable summary; `CLAUDE.md` is the fuller project context.
 
-## Backend n8n workflow — found in Drive, not wired up
+**Still missing, referenced by `CLAUDE.md` but not yet supplied:** `household-ledger-architecture.md` (the full architecture doc — `CLAUDE.md` and the schema doc both point to it for detail not repeated here) and `purchase_history.csv` (the 162-line-item source data the `Catalog` sheet should be seeded from). Both would help complete this repo if available.
 
-A `Household_Ledger_List_Budget_Webhook_Agent.json` n8n workflow (created 2026-07-28, Drive root, alongside the BNS project files) implements a shopping-list/budget backend intended for this app — Google Sheets-backed `get`/`upsert`/`remove` actions for a shopping list, plus a running total against a budget. Its own in-workflow setup notes list what's still needed:
+## Backend n8n workflow fleet — only 1 of 5 pieces exists
 
-- [ ] Create the actual Google Sheet (the workflow's `documentId` is a placeholder ID that doesn't resolve to a real spreadsheet yet) with a `ShoppingList` tab (`item, category, store, price, qty, cadence, added_date`) and a `Settings` tab (`budget, cadence`).
-- [ ] Write `household-ledger-sheets-schema.md` — referenced by the workflow's setup notes as the schema reference, but doesn't exist anywhere in Drive or this repo yet.
-- [ ] Connect a Google Sheets credential in n8n (the workflow currently references a personal-account credential ID copied from the BNS workflows — confirm whether that's the intended account).
-- [ ] Activate the workflow and get the production webhook URL, then update `WEBHOOK_URL` in `src/App.jsx` to point at it (currently pointed at a different/placeholder n8n webhook per the README).
-- [ ] Import the workflow JSON into the live n8n instance — it doesn't appear to be deployed yet, only saved to Drive.
+Per `CLAUDE.md`, the intended architecture is a fleet of n8n workflows modeled on the existing Beautiful Nature Scenes / ME101 automations. Only the first is built:
+
+- [x] List/Budget Webhook Agent — implemented (`Household_Ledger_List_Budget_Webhook_Agent.json`, now in this repo). Still needs: a real Google Sheet built from `household-ledger-sheets-schema.md` (the workflow's `documentId` is a `REPLACE_WITH_SHEET_ID` placeholder), a Google Sheets credential connected (currently references a credential ID copied from the BNS workflows — confirm this is the intended account), the workflow activated in n8n and imported (it's saved to Drive/this repo but not deployed), and the resulting production webhook URL wired into `WEBHOOK_URL` in `src/App.jsx`.
+- [ ] Price Refresh Agent — scheduled, detects stale `Catalog` prices, re-scrapes, updates the sheet. Not started. Open design question: hit known store URLs directly, or search generally (see Open Decisions below).
+- [ ] Budget Alert Listener — Telegram alert when a list goes over budget. Not started.
+- [ ] Check-In Agent — scheduled (default every 2 days) Telegram check-in on inventory status (`stocked`/`low`/`finished`). Not started.
+- [ ] Recommendation Agent — bulk-trip economics (is a farther bulk-price store worth the trip, based on `Inventory.avg_days_to_finish` × price gap vs. `est_trip_cost`). Not started; gated behind 8 completed purchase cycles per item before being called "reliable" rather than "provisional."
+
+## Open decisions (from `CLAUDE.md`, not yet finalized)
+
+- [ ] Does the Price Refresh Agent hit known store URLs, or search generally?
+- [ ] New dedicated spreadsheet, or new tabs in an existing one?
+- [ ] One shared Telegram bot for budget alerts + inventory check-ins, or two separate bots?
+- [ ] Check-in cadence: every 2 days (current default), daily, or every 3?
+- [ ] Store distances: manual entry to start, or auto-geocoding right away?
+
+## Data quality next steps (from `CLAUDE.md`)
+
+- [ ] Capture pack size/weight on future receipts (or via product photos) to fill in unit pricing — priority: meat (ground beef, ribs), where dollar swings are biggest. Currently only Eggs and Potato Chips have a confirmed, size-verified cross-store price match; this is intentional caution-icon behavior, not a bug to "fix" by faking a match.
+- [ ] Add Publix and Amazon once sample orders exist for those stores.
+- [ ] Get real usage feedback from both users (Graham and Rutendo — this tool is meant for both, not just Graham) and iterate based on what's actually annoying or missing in practice.
 
 ## Suggested next steps
 

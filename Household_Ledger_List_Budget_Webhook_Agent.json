@@ -1,0 +1,248 @@
+{
+  "name": "Household Ledger - List Budget Webhook Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## SETUP TODOs\n1. Replace `documentId` on every Google Sheets node below with your Household Ledger spreadsheet ID (see household-ledger-sheets-schema.md)\n2. Connect your Google Sheets credential (reused the same credential ID as your BNS workflows below — adjust if this is a different Google account)\n3. Activate this workflow, then grab the Production webhook URL from the Webhook node — that's what the mobile app POSTs to\n\nExpected POST body:\n`{ \"action\": \"get\" }`\n`{ \"action\": \"upsert\", \"item\": \"Basmati Rice\", \"category\": \"Pantry\", \"store\": \"Walmart\", \"price\": 9.52, \"qty\": 1, \"cadence\": \"Week\" }`\n`{ \"action\": \"remove\", \"item\": \"Basmati Rice\" }`\n\nResponse: `{ \"list\": [...rows], \"total\": 42.10, \"budget\": 200, \"remaining\": 157.90 }`",
+        "height": 460,
+        "width": 380
+      },
+      "id": "note-1",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-1200, -420]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "household-ledger-list",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-960, 0],
+      "id": "webhook-1",
+      "name": "List Webhook",
+      "webhookId": "household-ledger-list"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "upsert",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Upsert"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "remove",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Remove"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "get",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Get"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [-720, 0],
+      "id": "switch-1",
+      "name": "Route Action"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "REPLACE_WITH_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "ShoppingList", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $json.body.item }}",
+            "category": "={{ $json.body.category }}",
+            "store": "={{ $json.body.store }}",
+            "price": "={{ $json.body.price }}",
+            "qty": "={{ $json.body.qty }}",
+            "cadence": "={{ $json.body.cadence }}",
+            "added_date": "={{ $today.format('yyyy-MM-dd') }}"
+          },
+          "matchingColumns": ["item"]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [-480, -160],
+      "id": "sheets-upsert",
+      "name": "Upsert List Row",
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "zz9INbfV79dYEmQl", "name": "Google Sheets account" }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "REPLACE_WITH_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "ShoppingList", "mode": "name" },
+        "filtersUI": {
+          "values": [
+            { "lookupColumn": "item", "lookupValue": "={{ $json.body.item }}" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [-480, 40],
+      "id": "sheets-find-remove",
+      "name": "Find Row to Remove",
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "zz9INbfV79dYEmQl", "name": "Google Sheets account" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": { "__rl": true, "value": "REPLACE_WITH_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "ShoppingList", "mode": "name" },
+        "startIndex": "={{ $json.row_number - 1 }}",
+        "numberToDelete": 1
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [-260, 40],
+      "id": "sheets-delete",
+      "name": "Delete Row",
+      "notes": "Uses row_number returned by the lookup node just before this. If the item wasn't found, this will error — acceptable for v1, revisit with an IF-guard later.",
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "zz9INbfV79dYEmQl", "name": "Google Sheets account" }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "REPLACE_WITH_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "ShoppingList", "mode": "name" },
+        "filtersUI": { "values": [] },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [-40, -60],
+      "id": "sheets-get-list",
+      "name": "Get Current List",
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "zz9INbfV79dYEmQl", "name": "Google Sheets account" }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "REPLACE_WITH_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Settings", "mode": "name" },
+        "filtersUI": { "values": [] },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [-40, 140],
+      "id": "sheets-get-settings",
+      "name": "Get Settings",
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "zz9INbfV79dYEmQl", "name": "Google Sheets account" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [180, 40],
+      "id": "merge-1",
+      "name": "Merge List + Settings"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input 0..N-1: ShoppingList rows, last item: Settings row (merged combineAll puts them sequentially per input branch)\nconst listRows = $('Get Current List').all().map(i => i.json);\nconst settings = $('Get Settings').first().json;\n\nconst total = listRows.reduce((sum, r) => sum + (Number(r.price) || 0) * (Number(r.qty) || 0), 0);\nconst budget = Number(settings.budget) || 0;\n\nreturn [{\n  json: {\n    list: listRows,\n    total: Math.round(total * 100) / 100,\n    budget,\n    remaining: Math.round((budget - total) * 100) / 100,\n    cadence: settings.cadence\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 40],
+      "id": "code-totals",
+      "name": "Compute Totals"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [620, 40],
+      "id": "respond-1",
+      "name": "Return List + Totals"
+    }
+  ],
+  "connections": {
+    "List Webhook": { "main": [[{ "node": "Route Action", "type": "main", "index": 0 }]] },
+    "Route Action": {
+      "main": [
+        [{ "node": "Upsert List Row", "type": "main", "index": 0 }],
+        [{ "node": "Find Row to Remove", "type": "main", "index": 0 }],
+        [{ "node": "Get Current List", "type": "main", "index": 0 }, { "node": "Get Settings", "type": "main", "index": 0 }]
+      ]
+    },
+    "Upsert List Row": { "main": [[{ "node": "Get Current List", "type": "main", "index": 0 }, { "node": "Get Settings", "type": "main", "index": 0 }]] },
+    "Find Row to Remove": { "main": [[{ "node": "Delete Row", "type": "main", "index": 0 }]] },
+    "Delete Row": { "main": [[{ "node": "Get Current List", "type": "main", "index": 0 }, { "node": "Get Settings", "type": "main", "index": 0 }]] },
+    "Get Current List": { "main": [[{ "node": "Merge List + Settings", "type": "main", "index": 0 }]] },
+    "Get Settings": { "main": [[{ "node": "Merge List + Settings", "type": "main", "index": 1 }]] },
+    "Merge List + Settings": { "main": [[{ "node": "Compute Totals", "type": "main", "index": 0 }]] },
+    "Compute Totals": { "main": [[{ "node": "Return List + Totals", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "triggerCount": 1,
+  "meta": { "templateCredsSetupCompleted": false }
+}
