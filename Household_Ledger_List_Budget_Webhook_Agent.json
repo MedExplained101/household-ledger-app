@@ -209,6 +209,27 @@
     },
     {
       "parameters": {
+        "workflowId": { "__rl": true, "value": "REPLACE_WITH_BUDGET_ALERT_LISTENER_WORKFLOW_ID", "mode": "id" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "total": "={{ $json.total }}",
+            "budget": "={{ $json.budget }}",
+            "remaining": "={{ $json.remaining }}",
+            "cadence": "={{ $json.cadence }}"
+          }
+        },
+        "options": { "waitForSubWorkflow": false }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [400, 200],
+      "id": "execute-budget-alert-listener",
+      "name": "Check Budget Alert",
+      "notes": "Fire-and-forget call to Household_Ledger_Budget_Alert_Listener.json, branching in parallel off Compute Totals so it never delays/affects the webhook response. Replace workflowId with the real ID once that workflow is imported into n8n (visible in its URL)."
+    },
+    {
+      "parameters": {
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
@@ -233,7 +254,7 @@
     "Get Current List": { "main": [[{ "node": "Merge List + Settings", "type": "main", "index": 0 }]] },
     "Get Settings": { "main": [[{ "node": "Merge List + Settings", "type": "main", "index": 1 }]] },
     "Merge List + Settings": { "main": [[{ "node": "Compute Totals", "type": "main", "index": 0 }]] },
-    "Compute Totals": { "main": [[{ "node": "Return List + Totals", "type": "main", "index": 0 }]] }
+    "Compute Totals": { "main": [[{ "node": "Return List + Totals", "type": "main", "index": 0 }, { "node": "Check Budget Alert", "type": "main", "index": 0 }]] }
   },
   "settings": {
     "executionOrder": "v1",

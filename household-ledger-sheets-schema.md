@@ -20,14 +20,14 @@ Create one new spreadsheet named `Household Ledger` with these tabs. Column orde
 | 200 | Week | idle | |
 
 - Single row, values editable from the app or directly in Sheets
-- `CheckIn_Status`/`CheckIn_ResumeURL` — **proposed addition (2026-07-30)**, needed by `Household_Ledger_CheckIn_Agent.json`'s pause/resume mechanism (see that file and `Household_Ledger_CheckIn_Reply_Listener.json`). Mirrors the `Status`/`ResumeURL` columns BNS's own Telegram Approval Listener uses on its `Calendar` tab, just on this single-row tab instead of a per-day row, since there's only ever one household check-in pending at a time. Not required until that scaffold is actually deployed.
+- `CheckIn_Status`/`CheckIn_ResumeURL` — needed by `Household_Ledger_CheckIn_Agent.json`'s pause/resume mechanism (see that file and `Household_Ledger_CheckIn_Reply_Listener.json`). Mirrors the `Status`/`ResumeURL` columns BNS's own Telegram Approval Listener uses on its `Calendar` tab, just on this single-row tab instead of a per-day row, since there's only ever one household check-in pending at a time. Already live in the real spreadsheet (`provision_sheet.py` creates these columns).
 
 ## Tab: `PriceLog`
 | item | store | price | date | status | scraped_at |
 |---|---|---|---|---|---|
 
 - Append-only history, one row per price observed by the Price Refresh Agent — this is what eventually powers trend/annual-savings math
-- `status`/`scraped_at` — **proposed addition (2026-07-30)**, needed by `Household_Ledger_Price_Refresh_Agent.json`'s 24-48h freshness gate (CLAUDE.md §5): a scraped price is staged here as `status: pending` and only promoted into `Catalog` once it's sat unchallenged past the hold period — `scraped_at` needs hour-level precision for that, unlike `date`. Not required until that scaffold is actually deployed.
+- `status`/`scraped_at` — needed by `Household_Ledger_Price_Refresh_Agent.json`'s 24-48h freshness gate (CLAUDE.md §5): a scraped price is staged here as `status: pending` and only promoted into `Catalog` once it's sat unchallenged past the hold period — `scraped_at` needs hour-level precision for that, unlike `date`. Already live in the real spreadsheet (`provision_sheet.py` creates these columns).
 
 ## Tab: `Inventory`
 | item | status | last_purchased_date | last_finished_date | avg_days_to_finish | cycle_count |
