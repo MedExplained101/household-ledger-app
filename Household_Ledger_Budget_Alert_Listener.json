@@ -93,7 +93,7 @@
     },
     {
       "parameters": {
-        "chatId": "REPLACE_WITH_TELEGRAM_CHAT_ID",
+        "chatId": "1662316637",
         "operation": "sendMessage",
         "text": "={{ $json.text }}"
       },

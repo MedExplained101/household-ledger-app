@@ -43,7 +43,7 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "REPLACE_WITH_SHEET_ID",
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
           "mode": "id"
         },
         "sheetName": {
@@ -75,7 +75,7 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "REPLACE_WITH_SHEET_ID",
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
           "mode": "id"
         },
         "sheetName": {
@@ -107,7 +107,7 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "REPLACE_WITH_SHEET_ID",
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
           "mode": "id"
         },
         "sheetName": {
@@ -221,7 +221,7 @@
     },
     {
       "parameters": {
-        "chatId": "REPLACE_WITH_TELEGRAM_CHAT_ID",
+        "chatId": "1662316637",
         "operation": "sendMessage",
         "text": "={{ $json.text }}"
       },
