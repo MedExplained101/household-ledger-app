@@ -91,7 +91,7 @@
     },
     {
       "parameters": {
-        "chatId": "REPLACE_WITH_TELEGRAM_CHAT_ID",
+        "chatId": "1662316637",
         "operation": "sendMessage",
         "text": "={{ $json.text }}"
       },
@@ -408,7 +408,7 @@
     },
     {
       "parameters": {
-        "chatId": "REPLACE_WITH_TELEGRAM_CHAT_ID",
+        "chatId": "1662316637",
         "operation": "sendMessage",
         "text": "=\u2705 Inventory updated. Low/finished items auto-added to the list where a price was on file."
       },
