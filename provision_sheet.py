@@ -8,10 +8,11 @@ Inventory, Stores), writes their header rows, sets the default Settings row,
 and seeds Catalog from catalog_seed.csv.
 
 Reuses the same OAuth pattern as the sibling 180-on-Circular project's
-provision_sheets.py -- if you already have a working credentials.json/token.json
-from that project (or any other script using the Sheets API scope), you can
-point CREDENTIALS_FILE/TOKEN_FILE below at the same files rather than
-re-authorizing from scratch.
+common_auth.py: credentials.json/token.json live in this repo's root
+(current working directory) by default, overridable via CREDENTIALS_PATH/
+TOKEN_PATH env vars. Copy the same credentials.json you already downloaded
+for that project into this repo's root to skip re-authorizing from scratch
+(a fresh token.json will still be written here, scoped to Sheets only).
 
 USAGE:
     python provision_sheet.py
@@ -22,6 +23,7 @@ every Google Sheets node's documentId in Household_Ledger_List_Budget_Webhook_Ag
 """
 
 import csv
+import os
 import sys
 from pathlib import Path
 
@@ -32,9 +34,11 @@ from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
-CRED_DIR = Path.home() / ".gdrive_sync"
-CREDENTIALS_FILE = CRED_DIR / "credentials.json"
-TOKEN_FILE = CRED_DIR / "household_ledger_token.json"
+# Same convention as the sibling 180-on-Circular project's common_auth.py:
+# credentials.json/token.json in the current working directory (i.e. this
+# repo's root), overridable via CREDENTIALS_PATH/TOKEN_PATH env vars.
+CREDENTIALS_FILE = Path(os.environ.get("CREDENTIALS_PATH", "credentials.json"))
+TOKEN_FILE = Path(os.environ.get("TOKEN_PATH", "token.json"))
 
 SPREADSHEET_TITLE = "Household Ledger"
 
@@ -64,14 +68,14 @@ def get_service():
     if not creds or not creds.valid:
         if not CREDENTIALS_FILE.exists():
             sys.exit(
-                f"Missing {CREDENTIALS_FILE}. Reuse the same credentials.json you already "
-                f"downloaded from Google Cloud Console for the 180-on-Circular project (copy "
-                f"it into {CRED_DIR}), or download a fresh OAuth Desktop client if you'd "
-                f"rather keep the two projects on separate Google Cloud credentials."
+                f"Missing {CREDENTIALS_FILE.resolve()}. Copy the same credentials.json you "
+                f"already downloaded from Google Cloud Console for the 180-on-Circular "
+                f"project into this repo's root folder (next to provision_sheet.py), or "
+                f"download a fresh OAuth Desktop client if you'd rather keep the two "
+                f"projects on separate Google Cloud credentials."
             )
         flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_FILE), SCOPES)
         creds = flow.run_local_server(port=0)
-        CRED_DIR.mkdir(exist_ok=True)
         TOKEN_FILE.write_text(creds.to_json())
     return build("sheets", "v4", credentials=creds)
 
