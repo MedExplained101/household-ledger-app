@@ -25,7 +25,7 @@ Per `CLAUDE.md`, the intended architecture is a fleet of n8n workflows modeled o
 
 - [ ] Does the Price Refresh Agent hit known store URLs, or search generally?
 - [x] ~~New dedicated spreadsheet, or new tabs in an existing one?~~ — resolved 2026-07-31: dedicated spreadsheet (`provision_sheet.py` creates "Household Ledger" as its own sheet).
-- [ ] One shared Telegram bot for budget alerts + inventory check-ins, or two separate bots — and is it the same bot as BNS's existing Approval bot, or a new one? **Blocks all four remaining scaffolds from being deployable** (Budget Alert Listener, Check-In Agent, Check-In Reply Listener, Recommendation Agent all send Telegram messages).
+- [x] ~~One shared Telegram bot for budget alerts + inventory check-ins, or two separate bots — same bot as BNS's existing Approval bot, or a new one?~~ — resolved 2026-07-31: **new dedicated bot**, not shared with BNS. Still needs: create it via @BotFather, add its token as a Telegram credential in n8n, get the household chat ID, and drop both into the `REPLACE_WITH_TELEGRAM_CREDENTIAL_ID`/`REPLACE_WITH_TELEGRAM_CHAT_ID`/`REPLACE_WITH_BOT_NAME` placeholders across all four scaffolds (Budget Alert Listener, Check-In Agent, Check-In Reply Listener, Recommendation Agent).
 - [ ] Check-in cadence: every 2 days (current default), daily, or every 3?
 - [ ] Store distances: manual entry to start, or auto-geocoding right away?
 
