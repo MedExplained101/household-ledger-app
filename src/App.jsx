@@ -1,9 +1,13 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Plus, Minus, X, ChevronDown, AlertTriangle, Search, RefreshCw, WifiOff } from "lucide-react";
 
 // Your n8n production webhook — the mobile app never touches Google Sheets
 // directly, it POSTs actions here and the workflow reads/writes ShoppingList + Settings.
-const WEBHOOK_URL = "https://medexplained101.app.n8n.cloud/webhook/household-ledger-list";
+// Set VITE_WEBHOOK_URL in your hosting provider's env vars to rotate this without a
+// code change (see .env.example). Falls back to the current production URL if unset.
+const WEBHOOK_URL =
+  import.meta.env.VITE_WEBHOOK_URL ||
+  "https://medexplained101.app.n8n.cloud/webhook/household-ledger-list";
 
 // ---------------------------------------------------------------------------
 // CATALOG — built from parsed Costco + Walmart receipts (Alpharetta / Milton, GA)
@@ -157,7 +161,7 @@ export default function HouseholdLedger() {
     try {
       const data = await callWebhook({ action: "get" });
       applyServerState(data);
-    } catch (e) {
+    } catch {
       setError("Couldn't reach the server — showing last known list.");
     } finally {
       setSyncing(false);
@@ -189,7 +193,7 @@ export default function HouseholdLedger() {
         cadence,
       });
       applyServerState(data);
-    } catch (e) {
+    } catch {
       setError("Couldn't save that to the server — try again.");
     } finally {
       setSyncing(false);
@@ -215,7 +219,7 @@ export default function HouseholdLedger() {
               cadence,
             });
       applyServerState(data);
-    } catch (e) {
+    } catch {
       setError("Couldn't update that quantity — try again.");
     } finally {
       setSyncing(false);
@@ -239,7 +243,7 @@ export default function HouseholdLedger() {
         cadence,
       });
       applyServerState(data);
-    } catch (e) {
+    } catch {
       setError("Couldn't switch stores — try again.");
     } finally {
       setSyncing(false);
@@ -252,7 +256,7 @@ export default function HouseholdLedger() {
     try {
       const data = await callWebhook({ action: "remove", item: name });
       applyServerState(data);
-    } catch (e) {
+    } catch {
       setError("Couldn't remove that item — try again.");
     } finally {
       setSyncing(false);
@@ -349,7 +353,7 @@ export default function HouseholdLedger() {
               />
             </div>
             <p className="text-[10px] text-[#8A836B] mt-1">
-              Loaded from Settings — editing here doesn't write back yet (Settings sheet isn't wired for updates).
+              Loaded from Settings — editing here doesn&apos;t write back yet (Settings sheet isn&apos;t wired for updates).
             </p>
           </div>
 
@@ -459,7 +463,7 @@ export default function HouseholdLedger() {
             </div>
           ) : list.length === 0 ? (
             <div className="border border-dashed border-[#D8CFB8] rounded-sm py-16 text-center text-[#8A836B]">
-              Add items from the catalog to start this {cadence.toLowerCase()}'s list.
+              Add items from the catalog to start this {cadence.toLowerCase()}&apos;s list.
             </div>
           ) : (
             <div className="border border-[#1F2A1E] bg-white">
@@ -580,7 +584,7 @@ export default function HouseholdLedger() {
             <AlertTriangle size={12} className="mt-0.5 shrink-0 text-[#C98A2C]" />
             <span>
               Items marked with a caution icon have a price from both stores, but at least one
-              store's pack size wasn't printed on the receipt — so the two totals aren't a real
+              store&apos;s pack size wasn&apos;t printed on the receipt — so the two totals aren&apos;t a real
               per-unit comparison yet. Only <strong>Eggs</strong> and <strong>Potato Chips</strong> have
               confirmed sizes on both sides right now; everything else needs a size (or a photo
               showing the weight/count) to turn into a true $/lb or $/ct comparison.

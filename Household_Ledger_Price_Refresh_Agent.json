@@ -1,0 +1,544 @@
+{
+  "name": "Household Ledger - Price Refresh Agent (SCAFFOLD, not deployed)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## SCAFFOLD \u2014 NOT DEPLOYED\nThis workflow is a draft, modeled on Beautiful Nature Scenes' Content Calendar Generator (gap-detection) and Tally Sorter (clear+append). It has never been run.\n\nSETUP TODOs before activating:\n1. Replace `documentId` on every Google Sheets node with the real Household Ledger spreadsheet ID.\n2. Connect a Google Sheets credential.\n3. Resolve Open Decision #1 (household-ledger-architecture.md \u00a78): does 'Fetch Price Source' hit a known store product-page URL per item, or a general web-search API? That node is a placeholder either way \u2014 wire it once decided.\n4. Connect a Claude/Anthropic credential for the extraction step (replace `REPLACE_WITH_ANTHROPIC_CREDENTIAL_ID`).\n5. SCHEMA EXTENSION NEEDED: `PriceLog` (currently item/store/price/date per household-ledger-sheets-schema.md) needs two more columns for this workflow's 24-48h freshness gate to work: `status` (pending/promoted) and `scraped_at` (full timestamp, not just date \u2014 the gate is measured in hours). Not yet added to the schema doc.\n\nTwo independent branches, both off the same weekly trigger:\nBRANCH A (top): finds stale Catalog items, scrapes+extracts a new price, stages it in PriceLog as 'pending' rather than trusting it immediately.\nBRANCH B (bottom): promotes PriceLog entries that have sat as 'pending' for the configured hold period with no newer conflicting scrape \u2014 this is the 24-48h freshness gate from CLAUDE.md/architecture.md \u00a75, implemented as a two-step stage-then-promote rather than a bare scrape-and-trust path.\n\nFailure handling: an item that fails extraction validation is logged via a NoOp node for now (see its own note) rather than retried automatically \u2014 matches the existing Webhook Agent's 'acceptable for v1, revisit later' precedent, not a gap unique to this workflow.",
+        "height": 620,
+        "width": 460
+      },
+      "id": "note-1",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1400,
+        -680
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 7,
+              "triggerAtHour": 6,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "trigger-1",
+      "name": "Weekly Refresh Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1400,
+        -160
+      ],
+      "notes": "Weekly by default \u2014 CLAUDE.md flags the n8n plan's monthly execution cap (~55 items x 2 stores adds up fast if scheduled too often). Adjust once real usage shows how often prices actually move."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Catalog",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-catalog",
+      "name": "Get Catalog",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1160,
+        -320
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Same gap/staleness-detection shape as BNS's 'Check Buffer & Prepare Generator Input'.\nconst STALE_AFTER_DAYS = 14;\nconst MAX_ITEMS_PER_RUN = 20; // respects the monthly execution-cap warning in CLAUDE.md\n\nconst rows = $input.all().map(i => i.json);\nconst now = DateTime.now();\n\nconst withAge = rows.map(r => {\n  const lu = r.last_updated ? DateTime.fromISO(String(r.last_updated)) : null;\n  const ageDays = lu && lu.isValid ? now.diff(lu, 'days').days : Infinity; // blank/invalid = infinitely stale\n  return { ...r, _ageDays: ageDays };\n});\n\nconst stale = withAge\n  .filter(r => r._ageDays >= STALE_AFTER_DAYS)\n  .sort((a, b) => b._ageDays - a._ageDays)\n  .slice(0, MAX_ITEMS_PER_RUN);\n\nreturn stale.map(r => ({ json: { item: r.item, category: r.category, store: r.store } }));"
+      },
+      "id": "code-select-stale",
+      "name": "Select Stale Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -940,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-items",
+      "name": "Loop Over Stale Items",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -720,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://REPLACE_WITH_PRICE_SOURCE/{{ encodeURIComponent($json.store) }}/{{ encodeURIComponent($json.item) }}",
+        "options": {}
+      },
+      "id": "http-fetch-source",
+      "name": "Fetch Price Source (PLACEHOLDER)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -480,
+        -260
+      ],
+      "notes": "Open Decision #1 (household-ledger-architecture.md \u00a78): known store product-page URL per item, or a general web-search API? Stubbed either way \u2014 wire once decided."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"model\": \"claude-sonnet-5\",\n  \"max_tokens\": 300,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Extract the current price for '\" + $json.item + \"' at \" + $json.store + \" from this page content. Respond with ONLY a JSON object: {\\\"store\\\": string, \\\"item\\\": string, \\\"price\\\": number, \\\"unit_price\\\": number|null, \\\"size\\\": string|null, \\\"unit_label\\\": string|null}. No prose, no markdown fences.\\n\\nPAGE CONTENT:\\n\" + $('Fetch Price Source (PLACEHOLDER)').first().json.data\n  }]\n} }}",
+        "options": {}
+      },
+      "id": "http-extract-llm",
+      "name": "Extract Price via LLM (PLACEHOLDER)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -260,
+        -260
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_ANTHROPIC_CREDENTIAL_ID",
+          "name": "Anthropic API Key (Household Ledger)"
+        }
+      },
+      "notes": "Structured-JSON-only extraction per CLAUDE.md's 'never free text' rule. Same shape ME101 uses for its equivalent agent (~38.5% early failure rate there per the Master Work Log) \u2014 validation happens in the next node, not here."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validates the LLM's extraction against the required schema before it's trusted at all.\n// Never a bare scrape-and-trust path, per CLAUDE.md.\nconst item = $('Loop Over Stale Items').first().json;\nlet parsed;\ntry {\n  const raw = $input.first().json.content?.[0]?.text ?? '';\n  parsed = JSON.parse(raw);\n} catch (e) {\n  return [{ json: { valid: false, item: item.item, store: item.store, reason: 'unparseable JSON from extraction' } }];\n}\n\nconst priceOk = typeof parsed.price === 'number' && parsed.price > 0;\nconst storeOk = typeof parsed.store === 'string' && parsed.store.length > 0;\nconst itemOk = typeof parsed.item === 'string' && parsed.item.length > 0;\n\nif (!priceOk || !storeOk || !itemOk) {\n  return [{ json: { valid: false, item: item.item, store: item.store, reason: 'missing/invalid required field', raw: parsed } }];\n}\n\nreturn [{ json: { valid: true, ...parsed } }];"
+      },
+      "id": "code-validate",
+      "name": "Validate Extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -40,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-valid",
+      "name": "Extraction Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        180,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "PriceLog",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $json.item }}",
+            "store": "={{ $json.store }}",
+            "price": "={{ $json.price }}",
+            "date": "={{ $today.format('yyyy-MM-dd') }}",
+            "status": "pending",
+            "scraped_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "sheets-append-pricelog",
+      "name": "Stage in PriceLog as Pending",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        400,
+        -340
+      ],
+      "notes": "Uses the proposed status/scraped_at schema extension \u2014 see Setup Notes. This is the 'stage' half of the 24-48h freshness gate; Catalog itself isn't touched here.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "noop-log-failure",
+      "name": "Log Extraction Failure (v1)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -160
+      ],
+      "notes": "v1: no persistent failure log, no retry \u2014 same 'acceptable for v1, revisit later' shape as the existing Webhook Agent's Delete Row node. A v2 could append to a failures sheet or alert via Telegram after N consecutive failures for the same item."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "PriceLog",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-pricelog",
+      "name": "Get All PriceLog Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1160,
+        40
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 24-48h freshness gate (CLAUDE.md / architecture.md Section 5): a newly scraped price\n// isn't trusted into Catalog until it's sat unchallenged for PROMOTE_AFTER_HOURS, and only\n// if no newer scrape for the same item+store has landed since (which would supersede it).\nconst PROMOTE_AFTER_HOURS = 36; // middle of the 24-48h range CLAUDE.md specifies; adjust as needed\n\nconst rows = $input.all().map(i => i.json).filter(r => r.item && r.store);\nconst now = DateTime.now();\n\n// Latest row per item+store\nconst latestByKey = new Map();\nfor (const r of rows) {\n  const key = `${r.item}::${r.store}`;\n  const scrapedAt = r.scraped_at ? DateTime.fromISO(String(r.scraped_at)) : null;\n  const existing = latestByKey.get(key);\n  if (!existing || (scrapedAt && scrapedAt > existing._scrapedAt)) {\n    latestByKey.set(key, { ...r, _scrapedAt: scrapedAt });\n  }\n}\n\nconst ready = [];\nfor (const row of latestByKey.values()) {\n  if (row.status !== 'pending') continue;\n  if (!row._scrapedAt || !row._scrapedAt.isValid) continue;\n  const ageHours = now.diff(row._scrapedAt, 'hours').hours;\n  if (ageHours >= PROMOTE_AFTER_HOURS) {\n    ready.push({ item: row.item, store: row.store, price: row.price, date: row.date });\n  }\n}\n\nreturn ready.map(r => ({ json: r }));"
+      },
+      "id": "code-find-promotable",
+      "name": "Find Entries Ready to Promote",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -940,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Catalog",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $json.item }}",
+            "store": "={{ $json.store }}",
+            "price": "={{ $json.price }}",
+            "last_updated": "={{ $today.format('yyyy-MM-dd') }}",
+            "confidence": "web-search"
+          },
+          "matchingColumns": [
+            "item",
+            "store"
+          ]
+        },
+        "options": {}
+      },
+      "id": "sheets-update-catalog",
+      "name": "Promote Price into Catalog",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -720,
+        40
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "PriceLog",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $json.item }}",
+            "store": "={{ $json.store }}",
+            "status": "promoted"
+          },
+          "matchingColumns": [
+            "item",
+            "store"
+          ]
+        },
+        "options": {}
+      },
+      "id": "sheets-mark-promoted",
+      "name": "Mark PriceLog Entry Promoted",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -500,
+        40
+      ],
+      "notes": "Prevents this same entry being re-promoted on next week's run.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Weekly Refresh Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Catalog",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get All PriceLog Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Catalog": {
+      "main": [
+        [
+          {
+            "node": "Select Stale Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Stale Items": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Stale Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Stale Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Fetch Price Source (PLACEHOLDER)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Price Source (PLACEHOLDER)": {
+      "main": [
+        [
+          {
+            "node": "Extract Price via LLM (PLACEHOLDER)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Price via LLM (PLACEHOLDER)": {
+      "main": [
+        [
+          {
+            "node": "Validate Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Extraction": {
+      "main": [
+        [
+          {
+            "node": "Extraction Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraction Valid?": {
+      "main": [
+        [
+          {
+            "node": "Stage in PriceLog as Pending",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Extraction Failure (v1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage in PriceLog as Pending": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Stale Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Extraction Failure (v1)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Stale Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All PriceLog Rows": {
+      "main": [
+        [
+          {
+            "node": "Find Entries Ready to Promote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Entries Ready to Promote": {
+      "main": [
+        [
+          {
+            "node": "Promote Price into Catalog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Promote Price into Catalog": {
+      "main": [
+        [
+          {
+            "node": "Mark PriceLog Entry Promoted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false,
+  "triggerCount": 1,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

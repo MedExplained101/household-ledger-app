@@ -1,0 +1,664 @@
+{
+  "name": "Household Ledger - Check-In Agent (SCAFFOLD, not deployed)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## SCAFFOLD \u2014 NOT DEPLOYED\nModeled on BNS's Telegram Approval Listener pause/resume mechanism (read directly from beautifulnaturescenes-/beautiful_naturescenes_telegram_approval_listener_workflow.json to reuse the real shape, not invent a new one) plus architecture.md \u00a76's Check-In Agent spec. This is the SENDER half \u2014 a companion listener workflow (Household_Ledger_CheckIn_Reply_Listener.json) must run 24/7 alongside this one.\n\nSCHEMA EXTENSION NEEDED: `Settings` (currently budget/cadence, single row) needs two more columns for the pause/resume mechanism: `CheckIn_Status` (idle/pending) and `CheckIn_ResumeURL`. This mirrors BNS's own Calendar.Status/ResumeURL columns, just on the single-row Settings tab instead of a per-day Calendar row, since there's only ever one household to check in on at a time.\n\nIMPROVEMENT ON THE SOURCE PATTERN: BNS's own exported main workflow JSON doesn't actually include the node that captures `$execution.resumeUrl` and writes it to the sheet before the Wait node fires \u2014 that connective step is missing even in their template. This scaffold adds it explicitly ('Store Resume URL + Pending State' below) rather than silently copying the same gap forward.\n\nSETUP TODOs:\n1. Replace `documentId`/credentials placeholders.\n2. Resolve Open Decision #3 (architecture.md \u00a78): same Telegram bot as budget alerts / BNS's Approval bot, or a separate one?\n3. Resolve Open Decision #4: every-2-days is architecture.md's stated default \u2014 confirm or change the Schedule Trigger below.\n4. Auto-add-to-list step does a Catalog lookup for the cheapest store, same logic as the app's own bestStore() function in src/App.jsx \u2014 kept in sync manually for now; a future version could extract that into a shared function.",
+        "height": 620,
+        "width": 480
+      },
+      "id": "note-1",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1600,
+        -680
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 2,
+              "triggerAtHour": 18,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "trigger-1",
+      "name": "Check-In Trigger (every 2 days)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1600,
+        -120
+      ],
+      "notes": "Default cadence per architecture.md Open Decision #4 \u2014 change daysInterval to 1 or 3 if Graham prefers."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Inventory",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "status",
+              "lookupValue": "stocked"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sheets-get-stocked",
+      "name": "Get Stocked Items",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1380,
+        -120
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all().map(i => i.json.item).filter(Boolean);\nconst list = items.length ? items.join(', ') : '(nothing currently marked stocked)';\nconst text = `Household Ledger check-in \\uD83D\\uDCCB\\n\\nCurrently stocked: ${list}\\n\\n`\n  + `Reply in this format (either line optional, or reply NONE if nothing changed):\\n`\n  + `LOW: item, item\\nFINISHED: item, item`;\nreturn [{ json: { text } }];"
+      },
+      "id": "code-build-message",
+      "name": "Build Check-In Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1160,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "REPLACE_WITH_TELEGRAM_CHAT_ID",
+        "operation": "sendMessage",
+        "text": "={{ $json.text }}"
+      },
+      "id": "telegram-send-checkin",
+      "name": "Send Check-In Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -940,
+        -120
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_BOT_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Settings",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "CheckIn_Status": "pending",
+            "CheckIn_ResumeURL": "={{ $execution.resumeUrl }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "sheets-store-resume-url",
+      "name": "Store Resume URL + Pending State",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -720,
+        -120
+      ],
+      "notes": "Must run BEFORE the Wait node below \u2014 captures the resume URL while it's still available in this execution's context, per n8n's documented pattern for externally-triggered resume. Uses the proposed Settings schema extension.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "limitWaitTime": true,
+        "limitType": "afterTimeInterval",
+        "resumeAmount": 48,
+        "resumeUnit": "hours"
+      },
+      "id": "wait-checkin-reply",
+      "name": "Wait for Check-In Reply",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -500,
+        -120
+      ],
+      "notes": "Resumes when Household_Ledger_CheckIn_Reply_Listener.json calls this execution's resume URL. Times out after 48h if no reply \u2014 falls through with no lowItems/finishedItems, handled gracefully by the next Code node."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Payload posted by the Reply Listener workflow's Call Resume Webhook node.\nconst body = $input.first().json || {};\nreturn [{ json: { lowItems: body.lowItems || [], finishedItems: body.finishedItems || [] } }];"
+      },
+      "id": "code-parse-resume-payload",
+      "name": "Read Parsed Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Inventory",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-all-inventory",
+      "name": "Get All Inventory Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -60,
+        -220
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Computes the Inventory row updates for items marked low/finished in the reply,\n// including the running avg_days_to_finish per architecture.md Section 6 step 4.\nconst { lowItems, finishedItems } = $('Read Parsed Reply').first().json;\nconst rows = $input.all().map(i => i.json);\nconst byItem = new Map(rows.map(r => [r.item, r]));\nconst today = DateTime.now().toFormat('yyyy-MM-dd');\nconst updates = [];\n\nfor (const name of lowItems) {\n  const row = byItem.get(name);\n  if (!row) continue;\n  updates.push({ item: name, status: 'low', last_purchased_date: row.last_purchased_date,\n                 last_finished_date: row.last_finished_date, avg_days_to_finish: row.avg_days_to_finish,\n                 cycle_count: row.cycle_count });\n}\n\nfor (const name of finishedItems) {\n  const row = byItem.get(name);\n  if (!row) continue;\n  const purchased = row.last_purchased_date ? DateTime.fromFormat(String(row.last_purchased_date), 'yyyy-MM-dd') : null;\n  const daysElapsed = purchased && purchased.isValid ? DateTime.now().diff(purchased, 'days').days : null;\n  const prevAvg = Number(row.avg_days_to_finish) || null;\n  const prevCycles = Number(row.cycle_count) || 0;\n  // Simple running average, same style as BNS's recency-window logic.\n  const newAvg = daysElapsed == null ? prevAvg\n    : (prevAvg == null ? daysElapsed : ((prevAvg * prevCycles) + daysElapsed) / (prevCycles + 1));\n  updates.push({ item: name, status: 'finished', last_purchased_date: row.last_purchased_date,\n                 last_finished_date: today, avg_days_to_finish: newAvg ? Math.round(newAvg * 10) / 10 : '',\n                 cycle_count: prevCycles + 1 });\n}\n\nreturn updates.map(u => ({ json: u }));"
+      },
+      "id": "code-compute-inventory-updates",
+      "name": "Compute Inventory Updates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Inventory",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $json.item }}",
+            "status": "={{ $json.status }}",
+            "last_purchased_date": "={{ $json.last_purchased_date }}",
+            "last_finished_date": "={{ $json.last_finished_date }}",
+            "avg_days_to_finish": "={{ $json.avg_days_to_finish }}",
+            "cycle_count": "={{ $json.cycle_count }}"
+          },
+          "matchingColumns": [
+            "item"
+          ]
+        },
+        "options": {}
+      },
+      "id": "sheets-update-inventory",
+      "name": "Update Inventory Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        380,
+        -220
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Catalog",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-catalog-for-addlist",
+      "name": "Get Catalog (for auto-add pricing)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        160,
+        20
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Auto-adds newly low/finished items to ShoppingList, per architecture.md Section 6 step 5.\n// Picks the cheapest store per item, same logic as bestStore() in src/App.jsx, kept in\n// sync manually for now (not shared code between the app and this workflow).\nconst { lowItems, finishedItems } = $('Read Parsed Reply').first().json;\nconst names = [...new Set([...lowItems, ...finishedItems])];\nconst catalogRows = $input.all().map(i => i.json);\n\nconst rowsForItem = (name) => catalogRows.filter(r => r.item === name);\n\nconst additions = [];\nfor (const name of names) {\n  const rows = rowsForItem(name);\n  if (!rows.length) continue; // not in Catalog \u2014 skip rather than add a priceless row\n  const cheapest = rows.reduce((a, b) => (Number(b.price) < Number(a.price) ? b : a));\n  additions.push({\n    item: name,\n    category: cheapest.category,\n    store: cheapest.store,\n    price: cheapest.price,\n    qty: 1,\n  });\n}\nreturn additions.map(a => ({ json: a }));"
+      },
+      "id": "code-resolve-addlist",
+      "name": "Resolve Auto-Add Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        380,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Settings",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-settings-cadence",
+      "name": "Get Settings (for cadence)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        600,
+        20
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "ShoppingList",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $json.item }}",
+            "category": "={{ $json.category }}",
+            "store": "={{ $json.store }}",
+            "price": "={{ $json.price }}",
+            "qty": "={{ $json.qty }}",
+            "cadence": "={{ $('Get Settings (for cadence)').first().json.cadence }}",
+            "added_date": "={{ $today.format('yyyy-MM-dd') }}"
+          },
+          "matchingColumns": [
+            "item"
+          ]
+        },
+        "options": {}
+      },
+      "id": "sheets-upsert-shoppinglist",
+      "name": "Auto-Add to ShoppingList",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        820,
+        20
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "id": "merge-before-confirm",
+      "name": "Merge Both Branches",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1040,
+        -220
+      ],
+      "notes": "Same join pattern as the existing Webhook Agent's 'Merge List + Settings' node \u2014 waits for both the Inventory-update branch and the auto-add branch to finish before confirming, rather than firing twice."
+    },
+    {
+      "parameters": {
+        "chatId": "REPLACE_WITH_TELEGRAM_CHAT_ID",
+        "operation": "sendMessage",
+        "text": "=\u2705 Inventory updated. Low/finished items auto-added to the list where a price was on file."
+      },
+      "id": "telegram-confirm-checkin",
+      "name": "Send Confirmation",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1260,
+        -220
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_BOT_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Settings",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "CheckIn_Status": "idle",
+            "CheckIn_ResumeURL": ""
+          }
+        },
+        "options": {}
+      },
+      "id": "sheets-clear-pending",
+      "name": "Clear Pending State",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1480,
+        -220
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Check-In Trigger (every 2 days)": {
+      "main": [
+        [
+          {
+            "node": "Get Stocked Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stocked Items": {
+      "main": [
+        [
+          {
+            "node": "Build Check-In Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Check-In Message": {
+      "main": [
+        [
+          {
+            "node": "Send Check-In Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Check-In Message": {
+      "main": [
+        [
+          {
+            "node": "Store Resume URL + Pending State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Resume URL + Pending State": {
+      "main": [
+        [
+          {
+            "node": "Wait for Check-In Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Check-In Reply": {
+      "main": [
+        [
+          {
+            "node": "Read Parsed Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Parsed Reply": {
+      "main": [
+        [
+          {
+            "node": "Get All Inventory Rows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Catalog (for auto-add pricing)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All Inventory Rows": {
+      "main": [
+        [
+          {
+            "node": "Compute Inventory Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Inventory Updates": {
+      "main": [
+        [
+          {
+            "node": "Update Inventory Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Catalog (for auto-add pricing)": {
+      "main": [
+        [
+          {
+            "node": "Resolve Auto-Add Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Auto-Add Rows": {
+      "main": [
+        [
+          {
+            "node": "Get Settings (for cadence)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Settings (for cadence)": {
+      "main": [
+        [
+          {
+            "node": "Auto-Add to ShoppingList",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Inventory Rows": {
+      "main": [
+        [
+          {
+            "node": "Merge Both Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-Add to ShoppingList": {
+      "main": [
+        [
+          {
+            "node": "Merge Both Branches",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Both Branches": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Clear Pending State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false,
+  "triggerCount": 1,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
