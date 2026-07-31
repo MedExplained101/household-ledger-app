@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Plus, Minus, X, ChevronDown, AlertTriangle, Search, RefreshCw, WifiOff } from "lucide-react";
+import FeedbackButton from "./FeedbackButton.jsx";
 
 // Your n8n production webhook — the mobile app never touches Google Sheets
 // directly, it POSTs actions here and the workflow reads/writes ShoppingList + Settings.
@@ -246,6 +247,11 @@ export default function HouseholdLedger() {
     }
   }
 
+  const sendFeedback = useCallback(
+    (message) => callWebhook({ action: "feedback", message }),
+    [callWebhook]
+  );
+
   async function removeItem(name) {
     setSyncing(true);
     setError(null);
@@ -289,18 +295,21 @@ export default function HouseholdLedger() {
             Alpharetta / Milton, GA · prices from your last Costco &amp; Walmart runs
           </p>
         </div>
-        <div className="text-right text-xs uppercase tracking-widest text-[#8A836B] font-mono-tab flex items-center gap-1.5 justify-end">
-          {syncing ? (
-            <>
-              <RefreshCw size={12} className="animate-spin" /> Syncing
-            </>
-          ) : error ? (
-            <>
-              <WifiOff size={12} className="text-[#B23A2E]" /> Offline
-            </>
-          ) : (
-            "Synced"
-          )}
+        <div className="flex items-center gap-3">
+          <div className="text-right text-xs uppercase tracking-widest text-[#8A836B] font-mono-tab flex items-center gap-1.5 justify-end">
+            {syncing ? (
+              <>
+                <RefreshCw size={12} className="animate-spin" /> Syncing
+              </>
+            ) : error ? (
+              <>
+                <WifiOff size={12} className="text-[#B23A2E]" /> Offline
+              </>
+            ) : (
+              "Synced"
+            )}
+          </div>
+          <FeedbackButton onSubmit={sendFeedback} />
         </div>
       </header>
 
