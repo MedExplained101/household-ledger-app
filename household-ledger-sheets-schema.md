@@ -2,11 +2,12 @@
 Create one new spreadsheet named `Household Ledger` with these tabs. Column order matters for the n8n nodes below (they auto-map by header name, but keep headers exact).
 
 ## Tab: `Catalog`
-| item | category | store | price | unit_price | size | unit_label | last_updated | confidence |
-|---|---|---|---|---|---|---|---|---|
+| item | category | store | price | unit_price | size | unit_label | last_updated | confidence | product_url |
+|---|---|---|---|---|---|---|---|---|---|
 
 - `confidence`: free text for now, e.g. `receipt` / `web-search` / `estimate`
 - Seed this tab from `purchase_history.csv` — one row per item/store pair, same as the current CATALOG array in the app
+- `product_url` — optional, added 2026-07-31 for `Household_Ledger_Price_Refresh_Agent.json`'s hybrid price-source design (Open Decision #1, resolved): a direct link to this item's product page at this store. Rows with a URL get scraped directly (more reliable); blank rows fall back to a general web search instead. Fill these in gradually — not required for the workflow to run.
 
 ## Tab: `ShoppingList`
 | item | category | store | price | qty | cadence | added_date |
