@@ -1,9 +1,9 @@
 {
-  "name": "Household Ledger - Check-In Reply Listener (SCAFFOLD, not deployed)",
+  "name": "Household Ledger - Check-In Reply Listener",
   "nodes": [
     {
       "parameters": {
-        "content": "## SCAFFOLD \u2014 NOT DEPLOYED\nCompanion to Household_Ledger_CheckIn_Agent.json \u2014 must run 24/7 alongside it, same as how BNS's Telegram Approval Listener runs alongside its main content workflow. Node shape below is a direct adaptation of beautifulnaturescenes-/beautiful_naturescenes_telegram_approval_listener_workflow.json (read directly to reuse the real pattern rather than inventing a new one) \u2014 swapped from YES/NO parsing to the LOW:/FINISHED: list format the Check-In Agent's message asks for.\n\nSETUP TODOs:\n1. Connect the same Telegram bot credential as the Check-In Agent (Open Decision #3 \u2014 same bot as BNS's Approval bot, or a separate household one?).\n2. Connect a Google Sheets credential + real spreadsheet ID.\n3. Replace the chat-ID filter with the real household chat.\n\nHOW IT WORKS: fires on every message to the bot, filters to the household chat, parses LOW:/FINISHED:/NONE replies, reads Settings for a pending CheckIn_ResumeURL, and POSTs the parsed lists to that URL \u2014 waking the paused Check-In Agent execution.",
+        "content": "## DEPLOYED \u2014 live in n8n since 2026-07-31\nCompanion to Household_Ledger_CheckIn_Agent.json \u2014 runs 24/7 alongside it, same as how BNS's Telegram Approval Listener runs alongside its main content workflow. Node shape below is a direct adaptation of beautifulnaturescenes-/beautiful_naturescenes_telegram_approval_listener_workflow.json (read directly to reuse the real pattern rather than inventing a new one) \u2014 swapped from YES/NO parsing to the LOW:/FINISHED: list format the Check-In Agent's message asks for.\n\nSTATUS: real Telegram bot credential (shared dedicated household bot, Open Decision #3 resolved), Google Sheets credential, real spreadsheet ID, and real household chat ID all wired; workflow published. Not yet live-tested end-to-end.\n\nHOW IT WORKS: fires on every message to the bot, filters to the household chat, parses LOW:/FINISHED:/NONE replies, reads Settings for a pending CheckIn_ResumeURL, and POSTs the parsed lists to that URL \u2014 waking the paused Check-In Agent execution.",
         "height": 480,
         "width": 460
       },

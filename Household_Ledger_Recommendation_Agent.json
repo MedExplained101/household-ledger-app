@@ -1,9 +1,9 @@
 {
-  "name": "Household Ledger - Recommendation Agent (SCAFFOLD, not deployed)",
+  "name": "Household Ledger - Recommendation Agent",
   "nodes": [
     {
       "parameters": {
-        "content": "## SCAFFOLD \u2014 NOT DEPLOYED\nImplements household-ledger-architecture.md \u00a77 (bulk-trip economics) \u2014 the 4th of the 5 planned agents. Unlike the other three scaffolds, no schema extension is needed: `Stores` and `Inventory.cycle_count` are already in household-ledger-sheets-schema.md.\n\nWHY THIS CAN'T PRODUCE REAL OUTPUT YET, EVEN ONCE DEPLOYED: it needs real `Stores.distance_from_home_mi`/`est_trip_cost` data (Open Decision #5 \u2014 manual entry to start, per the doc's own recommendation) and real `Inventory.avg_days_to_finish`/`cycle_count` history, which only accumulates once the Check-In Agent has actually been running for multiple purchase cycles. That's expected \u2014 this is the same 'drafted before its dependencies exist' situation as the other three scaffolds.\n\nV1 SIMPLIFICATION, FLAGGED HONESTLY: architecture.md says trip cost should be 'amortized if the bulk buy covers several months of supply' \u2014 true multi-item trip-bundling (combining several items' savings to justify one trip) is a harder optimization problem than this scaffold solves. V1 rule: recommend only if a SINGLE item's own annual savings already exceeds one round trip's cost on its own \u2014 conservative (will under-recommend relative to true trip-bundling economics), but won't give a false-positive recommendation.\n\nSETUP TODOs: replace `documentId`/credential placeholders; connect Telegram (Open Decision #3, same question as the other Telegram-using scaffolds). The 'show as a badge in the app next to that item' idea in architecture.md \u00a77 step 4 is a src/App.jsx frontend change \u2014 not touched here, flagged as a separate follow-on task.",
+        "content": "## DEPLOYED \u2014 live in n8n since 2026-07-31\nImplements household-ledger-architecture.md \u00a77 (bulk-trip economics) \u2014 the 4th of the 5 planned agents. No schema extension needed: `Stores` and `Inventory.cycle_count` are already in household-ledger-sheets-schema.md.\n\nSTATUS: real `documentId`, chat ID, Google Sheets credential, and Telegram bot credential all wired; workflow published.\n\nWHY THIS CAN'T PRODUCE REAL OUTPUT YET, EVEN THOUGH DEPLOYED: it needs real `Stores.distance_from_home_mi`/`est_trip_cost` data (Open Decision #5, resolved 2026-08-01 as auto-geocoding \u2014 not yet wired into this workflow, see the 'Geocode Store Distance' node below) and real `Inventory.avg_days_to_finish`/`cycle_count` history, which only accumulates once the Check-In Agent has actually been running for multiple purchase cycles. That's expected \u2014 dependencies just haven't accumulated yet.\n\nV1 SIMPLIFICATION, FLAGGED HONESTLY: architecture.md says trip cost should be 'amortized if the bulk buy covers several months of supply' \u2014 true multi-item trip-bundling (combining several items' savings to justify one trip) is a harder optimization problem than this scaffold solves. V1 rule: recommend only if a SINGLE item's own annual savings already exceeds one round trip's cost on its own \u2014 conservative (will under-recommend relative to true trip-bundling economics), but won't give a false-positive recommendation.\n\nThe 'show as a badge in the app next to that item' idea in architecture.md \u00a77 step 4 is a src/App.jsx frontend change \u2014 not touched here, flagged as a separate follow-on task.",
         "height": 560,
         "width": 480
       },
@@ -38,6 +38,240 @@
         0
       ],
       "notes": "Weekly, per architecture.md \u00a77 ('weekly or monthly is plenty, this doesn't need daily'). Change daysInterval to 30 for monthly if preferred."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Settings",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-settings-geocode",
+      "name": "Get Settings for Home Address",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1400,
+        180
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "First step of the auto-geocoding chain (Open Decision #5, resolved 2026-08-01). Chained sequentially rather than run in parallel-then-merge, applying the exact lesson from today's Merge List + Settings bug in the List/Budget Webhook Agent: a named-node reference ($('Get Settings for Home Address')) is only safe once this node has actually finished, and a straight chain guarantees that without needing a Merge node at all."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-stores-geocode",
+      "name": "Get Stores for Geocoding",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1180,
+        180
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "Separate read from the 'Get Stores' node further down (which the recommendation math uses) \u2014 this one runs first and drives the geocoding pass so that later read picks up freshly-updated distances in the same execution."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.distance_from_home_mi }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty"
+              }
+            },
+            {
+              "leftValue": "={{ $('Get Settings for Home Address').first().json.home_address }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-missing-distance",
+      "name": "Missing Distance?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -960,
+        180
+      ],
+      "notes": "Only geocodes rows that don't already have a distance AND only if Settings.home_address has actually been filled in (it's blank by default \u2014 a real address is personal information and deliberately never committed to this repo, see household-ledger-sheets-schema.md). No home address set = this whole branch is a no-op and Stores stays exactly as manually entered, same behavior as before this feature existed."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://maps.googleapis.com/maps/api/distancematrix/json?origins={{ encodeURIComponent($('Get Settings for Home Address').first().json.home_address) }}&destinations={{ encodeURIComponent($json.address) }}&units=imperial",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-geocode-distance",
+      "name": "Geocode Store Distance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -740,
+        100
+      ],
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "REPLACE_WITH_GOOGLE_MAPS_CREDENTIAL_ID",
+          "name": "Google Maps Distance Matrix API Key (Household Ledger)"
+        }
+      },
+      "notes": "httpQueryAuth credential should hold the query param name 'key' and your Google Maps Platform API key as its value (Distance Matrix API takes the key as a URL param, not a header). Explicit Accept header added preemptively \u2014 applying the same fix Brave Search needed in the Price Refresh Agent (n8n's default multi-type Accept header 422s some APIs) rather than waiting to hit it live here too. Requires the Distance Matrix API enabled on that Google Cloud project; billing must be active (Google requires it even within the free monthly credit)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Origin item is the Stores row that triggered this branch (Get Stores for Geocoding),\n// looked up by pairedItem rather than $json since $json here is the HTTP response body.\nconst store = $('Get Stores for Geocoding').item.json.store;\nconst resp = $json;\nconst element = resp?.rows?.[0]?.elements?.[0];\n\nif (!element || element.status !== 'OK') {\n  return [{ json: { store, ok: false, reason: element?.status || 'no_response' } }];\n}\n\nconst miles = Math.round((element.distance.value / 1609.34) * 10) / 10;\n\n// Round-trip cost estimate using a standard per-mile rate as a stand-in for real\n// gas/wear-and-tear cost \u2014 a rough default, not a precise trip-cost model. Overwrite\n// est_trip_cost by hand directly in the Stores sheet later if a better number is known;\n// this only fills the cell, it never overwrites a value someone already entered manually\n// (see the Missing Distance? filter upstream).\nconst MILEAGE_RATE_PER_MI = 0.67;\nconst estTripCost = Math.round(miles * 2 * MILEAGE_RATE_PER_MI * 100) / 100;\n\nreturn [{ json: { store, ok: true, distance_from_home_mi: miles, est_trip_cost: estTripCost } }];"
+      },
+      "id": "code-parse-distance",
+      "name": "Parse Distance + Est Trip Cost",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-geocode-succeeded",
+      "name": "Geocode Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -300,
+        100
+      ],
+      "notes": "A non-OK Distance Matrix status (e.g. NOT_FOUND for a bad address, ZERO_RESULTS) skips the sheet write rather than clobbering the row with blanks \u2014 that store's distance just stays empty for this run, same as if geocoding hadn't run at all."
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "store": "={{ $json.store }}",
+            "distance_from_home_mi": "={{ $json.distance_from_home_mi }}",
+            "est_trip_cost": "={{ $json.est_trip_cost }}"
+          },
+          "matchingColumns": [
+            "store"
+          ]
+        },
+        "options": {}
+      },
+      "id": "sheets-update-store-distance",
+      "name": "Update Store Distance",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -80,
+        100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "noop-geocoding-done",
+      "name": "Geocoding Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        140,
+        180
+      ],
+      "notes": "Barrier node: every Stores row has either been geocoded+updated, already had a distance, or was skipped (no home address / geocode failure) by the time execution reaches here \u2014 only then do the three reads below (which the recommendation math depends on) fire, so they always see this run's fresh distances instead of racing the geocoding pass."
     },
     {
       "parameters": {
@@ -254,6 +488,108 @@
   ],
   "connections": {
     "Weekly Recommendation Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Settings for Home Address",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Settings for Home Address": {
+      "main": [
+        [
+          {
+            "node": "Get Stores for Geocoding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stores for Geocoding": {
+      "main": [
+        [
+          {
+            "node": "Missing Distance?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Missing Distance?": {
+      "main": [
+        [
+          {
+            "node": "Geocode Store Distance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Geocoding Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode Store Distance": {
+      "main": [
+        [
+          {
+            "node": "Parse Distance + Est Trip Cost",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Distance + Est Trip Cost": {
+      "main": [
+        [
+          {
+            "node": "Geocode Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Update Store Distance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Geocoding Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Store Distance": {
+      "main": [
+        [
+          {
+            "node": "Geocoding Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocoding Done": {
       "main": [
         [
           {

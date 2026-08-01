@@ -1,9 +1,9 @@
 {
-  "name": "Household Ledger - Check-In Agent (SCAFFOLD, not deployed)",
+  "name": "Household Ledger - Check-In Agent",
   "nodes": [
     {
       "parameters": {
-        "content": "## SCAFFOLD \u2014 NOT DEPLOYED\nModeled on BNS's Telegram Approval Listener pause/resume mechanism (read directly from beautifulnaturescenes-/beautiful_naturescenes_telegram_approval_listener_workflow.json to reuse the real shape, not invent a new one) plus architecture.md \u00a76's Check-In Agent spec. This is the SENDER half \u2014 a companion listener workflow (Household_Ledger_CheckIn_Reply_Listener.json) must run 24/7 alongside this one.\n\nSCHEMA EXTENSION NEEDED: `Settings` (currently budget/cadence, single row) needs two more columns for the pause/resume mechanism: `CheckIn_Status` (idle/pending) and `CheckIn_ResumeURL`. This mirrors BNS's own Calendar.Status/ResumeURL columns, just on the single-row Settings tab instead of a per-day Calendar row, since there's only ever one household to check in on at a time.\n\nIMPROVEMENT ON THE SOURCE PATTERN: BNS's own exported main workflow JSON doesn't actually include the node that captures `$execution.resumeUrl` and writes it to the sheet before the Wait node fires \u2014 that connective step is missing even in their template. This scaffold adds it explicitly ('Store Resume URL + Pending State' below) rather than silently copying the same gap forward.\n\nSETUP TODOs:\n1. Replace `documentId`/credentials placeholders.\n2. Resolve Open Decision #3 (architecture.md \u00a78): same Telegram bot as budget alerts / BNS's Approval bot, or a separate one?\n3. Resolve Open Decision #4: every-2-days is architecture.md's stated default \u2014 confirm or change the Schedule Trigger below.\n4. Auto-add-to-list step does a Catalog lookup for the cheapest store, same logic as the app's own bestStore() function in src/App.jsx \u2014 kept in sync manually for now; a future version could extract that into a shared function.",
+        "content": "## DEPLOYED \u2014 live in n8n since 2026-07-31\nModeled on BNS's Telegram Approval Listener pause/resume mechanism (read directly from beautifulnaturescenes-/beautiful_naturescenes_telegram_approval_listener_workflow.json to reuse the real shape, not invent a new one) plus architecture.md \u00a76's Check-In Agent spec. This is the SENDER half \u2014 a companion listener workflow (Household_Ledger_CheckIn_Reply_Listener.json) runs 24/7 alongside this one.\n\nSCHEMA EXTENSION: `Settings` carries two extra columns for the pause/resume mechanism: `CheckIn_Status` (idle/pending) and `CheckIn_ResumeURL`. Mirrors BNS's own Calendar.Status/ResumeURL columns, just on the single-row Settings tab instead of a per-day Calendar row, since there's only ever one household to check in on at a time. Live via `provision_sheet.py`.\n\nIMPROVEMENT ON THE SOURCE PATTERN: BNS's own exported main workflow JSON doesn't actually include the node that captures `$execution.resumeUrl` and writes it to the sheet before the Wait node fires \u2014 that connective step is missing even in their template. This scaffold adds it explicitly ('Store Resume URL + Pending State' below) rather than silently copying the same gap forward.\n\nSTATUS: real `documentId`, chat ID, Google Sheets credential, and Telegram bot credential all wired; workflow published. Open Decision #4 (cadence) resolved 2026-08-01 \u2014 every 3 days. Not yet live-tested end-to-end.\n\nAuto-add-to-list step does a Catalog lookup for the cheapest store, same logic as the app's own bestStore() function in src/App.jsx \u2014 kept in sync manually for now; a future version could extract that into a shared function.",
         "height": 620,
         "width": 480
       },
@@ -22,7 +22,7 @@
           "interval": [
             {
               "field": "days",
-              "daysInterval": 2,
+              "daysInterval": 3,
               "triggerAtHour": 18,
               "triggerAtMinute": 0
             }
@@ -30,14 +30,14 @@
         }
       },
       "id": "trigger-1",
-      "name": "Check-In Trigger (every 2 days)",
+      "name": "Check-In Trigger (every 3 days)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
         -1600,
         -120
       ],
-      "notes": "Default cadence per architecture.md Open Decision #4 \u2014 change daysInterval to 1 or 3 if Graham prefers."
+      "notes": "Open Decision #4 resolved 2026-08-01: every 3 days, chosen over the 2-day default and daily."
     },
     {
       "parameters": {
