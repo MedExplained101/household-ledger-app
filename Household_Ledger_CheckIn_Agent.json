@@ -126,9 +126,13 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
+            "row_number": 2,
             "CheckIn_Status": "pending",
             "CheckIn_ResumeURL": "={{ $execution.resumeUrl }}"
-          }
+          },
+          "matchingColumns": [
+            "row_number"
+          ]
         },
         "options": {}
       },
@@ -443,9 +447,13 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
+            "row_number": 2,
             "CheckIn_Status": "idle",
             "CheckIn_ResumeURL": ""
-          }
+          },
+          "matchingColumns": [
+            "row_number"
+          ]
         },
         "options": {}
       },
