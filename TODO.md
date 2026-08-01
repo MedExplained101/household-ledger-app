@@ -48,4 +48,14 @@ Based on gaps visible in the current README and project setup:
 - [x] ~~Decide on and document one canonical deploy path (Netlify vs Vercel)~~ — **confirmed 2026-07-30: Netlify.** README rewritten to describe the actual current setup (git-connected via `netlify.toml`, auto-build + PR previews, production deploys from `main`) instead of the stale drag-and-drop `netlify.app/drop` instructions it had before; Vercel section removed rather than left to drift.
 
 ---
+
+## Session log — 2026-08-01
+
+Household Ledger side of today's work (the sibling 180-on-Circular project's issues aren't tracked in this repo — see that project's own TODO):
+
+- All 5 n8n agents remain deployed as described above; no code changes needed today on this project. Today's session time went to diagnosing a live issue on the sibling 180-on-Circular app (Work Orders/Documents tabs returning "Couldn't reach the server" while Contacts loads fine) — **unresolved**, paused mid-diagnosis. Next step when picked back up: check the browser Network tab response for the Work Orders/Documents webhook calls, and open the actual Output data (not just node config) on the `Get Work Orders`/`Get Documents` nodes inside a real, freshly-triggered n8n execution.
+- n8n Cloud's shared monthly execution quota should have reset today (2026-08-01) — **not yet confirmed**. Once confirmed, still-pending smoke tests: List/Budget Webhook Agent (does the deployed app load real Catalog/ShoppingList data), Budget Alert Listener, Check-In Agent, Recommendation Agent.
+- Manual step still outstanding, not automatable: add the `product_url` column to the live "Household Ledger" Google Sheet's `Catalog` tab (schema/workflow support already shipped) if starting to benefit from the Price Refresh Agent's more-reliable known-URL branch.
+
+---
 *Add new items here as they come up, and check them off (or link a GitHub issue) as they're resolved — this keeps the doc useful instead of stale.*
