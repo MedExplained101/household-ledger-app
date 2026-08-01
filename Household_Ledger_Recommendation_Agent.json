@@ -371,6 +371,7 @@
     },
     {
       "parameters": {
+        "numberInputs": 3,
         "mode": "combine",
         "combineBy": "combineAll",
         "options": {}
