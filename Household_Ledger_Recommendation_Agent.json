@@ -370,7 +370,9 @@
           "name": "Google Sheets account"
         }
       },
-      "executeOnce": true
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "notes": "alwaysOutputData is required here, not optional: Inventory is genuinely empty until the Check-In Agent has completed real purchase cycles, and n8n halts the whole workflow on a node that produces zero output items. Compute Recommendations already handles an empty inventoryRows gracefully — this just lets it get there."
     },
     {
       "parameters": {
