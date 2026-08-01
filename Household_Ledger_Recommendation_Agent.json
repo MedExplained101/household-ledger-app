@@ -371,23 +371,6 @@
     },
     {
       "parameters": {
-        "numberInputs": 3,
-        "mode": "combine",
-        "combineBy": "combineAll",
-        "options": {}
-      },
-      "id": "merge-sources",
-      "name": "Merge Catalog + Stores + Inventory",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "position": [
-        -960,
-        60
-      ],
-      "notes": "Same join pattern as the existing Webhook Agent's 'Merge List + Settings' node."
-    },
-    {
-      "parameters": {
         "jsCode": "// Bulk-trip economics per architecture.md \u00a77, with the confidence gate from the same section:\n// 8 completed cycles before an item's own contribution is 'reliable' rather than 'provisional'.\n//\n// AMORTIZED ACROSS ITEMS (2026-08-01, replaces the old single-item-only V1 rule): a trip to a\n// farther 'bulk' store is justified if the SUM of every item's annual savings on that trip\n// clears the trip's own est_trip_cost \u2014 not just any one item alone. This still catches the old\n// single-item case for free (one big saving already clears the group total on its own), it just\n// stops missing the case where three modest per-item savings add up to justify the same drive.\nconst RELIABLE_CYCLE_THRESHOLD = 8;\n\nconst catalogRows = $('Get Catalog').all().map(i => i.json);\nconst storeRows = $('Get Stores').all().map(i => i.json);\nconst inventoryRows = $('Get Inventory').all().map(i => i.json);\n\nconst storeByName = new Map(storeRows.map(s => [s.store, s]));\nconst inventoryByItem = new Map(inventoryRows.map(r => [r.item, r]));\n\nconst unitPriceOf = (row) => {\n  const up = Number(row.unit_price);\n  if (up > 0) return up;\n  const p = Number(row.price);\n  return p > 0 ? p : null; // falls back to raw price if no unit_price, same convention as the app's priceOf()\n};\n\n// Group Catalog rows by item\nconst byItem = new Map();\nfor (const row of catalogRows) {\n  if (!byItem.has(row.item)) byItem.set(row.item, []);\n  byItem.get(row.item).push(row);\n}\n\n// Step 1: collect every candidate (item, nearStore, bulkStore) pair where the bulk store is\n// genuinely cheaper per unit, regardless of whether it clears the trip cost alone \u2014 grouped by\n// bulk store so the trip cost can be amortized across every item that would ride along.\nconst candidatesByBulkStore = new Map();\n\nfor (const [item, rows] of byItem.entries()) {\n  if (rows.length < 2) continue; // needs at least two stores to compare\n  const inv = inventoryByItem.get(item);\n  const avgDaysToFinish = inv ? Number(inv.avg_days_to_finish) : null;\n  if (!avgDaysToFinish || avgDaysToFinish <= 0) continue; // no consumption-rate data yet\n  const cycleCount = inv ? (Number(inv.cycle_count) || 0) : 0;\n  const annualQty = 365 / avgDaysToFinish;\n\n  const withStoreInfo = rows\n    .map(r => ({ ...r, _unitPrice: unitPriceOf(r), _store: storeByName.get(r.store) }))\n    .filter(r => r._unitPrice != null && r._store && Number(r._store.distance_from_home_mi) >= 0);\n  if (withStoreInfo.length < 2) continue;\n\n  withStoreInfo.sort((a, b) => Number(a._store.distance_from_home_mi) - Number(b._store.distance_from_home_mi));\n  const near = withStoreInfo[0];\n\n  for (const bulk of withStoreInfo.slice(1)) {\n    if (bulk._unitPrice >= near._unitPrice) continue; // not actually cheaper \u2014 no candidate\n    const annualSavings = (near._unitPrice - bulk._unitPrice) * annualQty;\n    if (annualSavings <= 0) continue;\n\n    const candidate = {\n      item,\n      nearStore: near.store,\n      annualSavings: Math.round(annualSavings * 100) / 100,\n      cycleCount,\n      reliable: cycleCount >= RELIABLE_CYCLE_THRESHOLD,\n    };\n    if (!candidatesByBulkStore.has(bulk.store)) candidatesByBulkStore.set(bulk.store, []);\n    candidatesByBulkStore.get(bulk.store).push(candidate);\n  }\n}\n\n// Step 2: a bulk store only becomes a recommendation if its candidate items' combined annual\n// savings clears that store's own trip cost \u2014 amortized across everything worth buying there.\nconst recommendations = [];\nfor (const [bulkStore, items] of candidatesByBulkStore.entries()) {\n  const store = storeByName.get(bulkStore);\n  const tripCost = Number(store?.est_trip_cost) || 0;\n  const totalAnnualSavings = items.reduce((sum, i) => sum + i.annualSavings, 0);\n  if (totalAnnualSavings <= tripCost) continue; // doesn't pay for the trip even combined\n\n  recommendations.push({\n    bulkStore,\n    tripCost,\n    totalAnnualSavings: Math.round(totalAnnualSavings * 100) / 100,\n    allReliable: items.every(i => i.reliable),\n    items,\n  });\n}\n\nreturn recommendations.map(r => ({ json: r }));"
       },
       "id": "code-compute-recommendations",
@@ -597,16 +580,6 @@
             "node": "Get Catalog",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Get Stores",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Get Inventory",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -615,7 +588,7 @@
       "main": [
         [
           {
-            "node": "Merge Catalog + Stores + Inventory",
+            "node": "Get Stores",
             "type": "main",
             "index": 0
           }
@@ -626,25 +599,14 @@
       "main": [
         [
           {
-            "node": "Merge Catalog + Stores + Inventory",
+            "node": "Get Inventory",
             "type": "main",
-            "index": 1
+            "index": 0
           }
         ]
       ]
     },
     "Get Inventory": {
-      "main": [
-        [
-          {
-            "node": "Merge Catalog + Stores + Inventory",
-            "type": "main",
-            "index": 2
-          }
-        ]
-      ]
-    },
-    "Merge Catalog + Stores + Inventory": {
       "main": [
         [
           {
