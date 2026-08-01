@@ -385,11 +385,13 @@
       "position": [
         -740,
         60
-      ]
+      ],
+      "alwaysOutputData": true,
+      "notes": "alwaysOutputData required: while Inventory has no real cycle history, this legitimately returns zero recommendations, and n8n halts a branch the moment a node outputs zero items — Check For Recommendations' own zero-handling code never even fires without this, despite being written specifically for that case."
     },
     {
       "parameters": {
-        "jsCode": "// Guarantees exactly one output item regardless of how many recommendations came out of\n// the previous node (including zero) — an If/Switch node given zero input items fires on\n// NEITHER branch in n8n, which would silently swallow the 'nothing to recommend' case if\n// this check node weren't here. A Code node in 'Run Once for All Items' mode always runs.\nconst items = $input.all().map(i => i.json);\nreturn [{ json: { hasRecommendations: items.length > 0, items } }];"
+        "jsCode": "// Guarantees exactly one output item regardless of how many recommendations came out of\n// the previous node (including zero) — an If/Switch node given zero input items fires on\n// NEITHER branch in n8n, which would silently swallow the 'nothing to recommend' case if\n// this check node weren't here. CORRECTION (2026-08-01, found live): a Code node in 'Run\n// Once for All Items' mode does NOT run on zero input unless the upstream node that fed it\n// has alwaysOutputData set — otherwise n8n halts the branch before this node ever fires.\n// Compute Recommendations has alwaysOutputData: true for exactly this reason.\nconst items = $input.all().map(i => i.json);\nreturn [{ json: { hasRecommendations: items.length > 0, items } }];"
       },
       "id": "code-check-any",
       "name": "Check For Recommendations",
