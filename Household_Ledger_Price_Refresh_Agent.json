@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## SCAFFOLD \u2014 NOT DEPLOYED\nThis workflow is a draft, modeled on Beautiful Nature Scenes' Content Calendar Generator (gap-detection) and Tally Sorter (clear+append). It has never been run.\n\nSETUP TODOs before activating:\n1. Replace `documentId` on every Google Sheets node with the real Household Ledger spreadsheet ID.\n2. Connect a Google Sheets credential.\n3. Resolve Open Decision #1 (household-ledger-architecture.md \u00a78): does 'Fetch Price Source' hit a known store product-page URL per item, or a general web-search API? That node is a placeholder either way \u2014 wire it once decided.\n4. Connect a Claude/Anthropic credential for the extraction step (replace `REPLACE_WITH_ANTHROPIC_CREDENTIAL_ID`).\n5. SCHEMA EXTENSION NEEDED: `PriceLog` (currently item/store/price/date per household-ledger-sheets-schema.md) needs two more columns for this workflow's 24-48h freshness gate to work: `status` (pending/promoted) and `scraped_at` (full timestamp, not just date \u2014 the gate is measured in hours). Not yet added to the schema doc.\n\nTwo independent branches, both off the same weekly trigger:\nBRANCH A (top): finds stale Catalog items, scrapes+extracts a new price, stages it in PriceLog as 'pending' rather than trusting it immediately.\nBRANCH B (bottom): promotes PriceLog entries that have sat as 'pending' for the configured hold period with no newer conflicting scrape \u2014 this is the 24-48h freshness gate from CLAUDE.md/architecture.md \u00a75, implemented as a two-step stage-then-promote rather than a bare scrape-and-trust path.\n\nFailure handling: an item that fails extraction validation is logged via a NoOp node for now (see its own note) rather than retried automatically \u2014 matches the existing Webhook Agent's 'acceptable for v1, revisit later' precedent, not a gap unique to this workflow.",
+        "content": "## SCAFFOLD \u2014 documentId/Sheets credential wired, price-source design resolved\nModeled on Beautiful Nature Scenes' Content Calendar Generator (gap-detection) and Tally Sorter (clear+append). Not yet live-tested.\n\nSETUP TODOs before activating:\n1. Connect a Google Sheets credential (documentId is already wired to the real spreadsheet).\n2. Connect a Claude/Anthropic credential for the extraction step (replace `REPLACE_WITH_ANTHROPIC_CREDENTIAL_ID`).\n3. Connect a Brave Search API credential for the search-fallback branch (replace `REPLACE_WITH_SEARCH_API_CREDENTIAL_ID`) \u2014 get a free/paid key at brave.com/search/api.\n4. Optionally start filling in `Catalog.product_url` per item/store (new optional column) \u2014 rows with a URL take the more-reliable known-page branch; rows without one always fall back to search. Not required to activate; an empty Catalog full of blanks just means every item takes the search branch until you fill some in.\n\nOpen Decision #1 (household-ledger-architecture.md \u00a78), resolved 2026-07-31: hybrid \u2014 known product-page URL when Catalog has one ('Has Product URL?' branch), general web search otherwise. Known-URL is materially more reliable (stable page vs. a search result that could be a reseller/wrong variant/stale cache); search fallback trades some accuracy for zero URL-maintenance burden on items you haven't gotten to yet. Costco's online prices are often member-login-gated either way \u2014 a scrape that comes back priceless there is expected, not a bug.\n\nTwo independent branches, both off the same weekly trigger:\nBRANCH A (top): finds stale Catalog items, fetches a price source (known URL or search fallback), extracts via LLM, stages the result in PriceLog as 'pending' rather than trusting it immediately.\nBRANCH B (bottom): promotes PriceLog entries that have sat as 'pending' for the configured hold period with no newer conflicting scrape \u2014 this is the 24-48h freshness gate from CLAUDE.md/architecture.md \u00a75, implemented as a two-step stage-then-promote rather than a bare scrape-and-trust path.\n\nFailure handling: an item that fails extraction validation is logged via a NoOp node for now (see its own note) rather than retried automatically \u2014 matches the existing Webhook Agent's 'acceptable for v1, revisit later' precedent, not a gap unique to this workflow.",
         "height": 620,
         "width": 460
       },
@@ -73,7 +73,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Same gap/staleness-detection shape as BNS's 'Check Buffer & Prepare Generator Input'.\nconst STALE_AFTER_DAYS = 14;\nconst MAX_ITEMS_PER_RUN = 20; // respects the monthly execution-cap warning in CLAUDE.md\n\nconst rows = $input.all().map(i => i.json);\nconst now = DateTime.now();\n\nconst withAge = rows.map(r => {\n  const lu = r.last_updated ? DateTime.fromISO(String(r.last_updated)) : null;\n  const ageDays = lu && lu.isValid ? now.diff(lu, 'days').days : Infinity; // blank/invalid = infinitely stale\n  return { ...r, _ageDays: ageDays };\n});\n\nconst stale = withAge\n  .filter(r => r._ageDays >= STALE_AFTER_DAYS)\n  .sort((a, b) => b._ageDays - a._ageDays)\n  .slice(0, MAX_ITEMS_PER_RUN);\n\nreturn stale.map(r => ({ json: { item: r.item, category: r.category, store: r.store } }));"
+        "jsCode": "// Same gap/staleness-detection shape as BNS's 'Check Buffer & Prepare Generator Input'.\nconst STALE_AFTER_DAYS = 14;\nconst MAX_ITEMS_PER_RUN = 20; // respects the monthly execution-cap warning in CLAUDE.md\n\nconst rows = $input.all().map(i => i.json);\nconst now = DateTime.now();\n\nconst withAge = rows.map(r => {\n  const lu = r.last_updated ? DateTime.fromISO(String(r.last_updated)) : null;\n  const ageDays = lu && lu.isValid ? now.diff(lu, 'days').days : Infinity; // blank/invalid = infinitely stale\n  return { ...r, _ageDays: ageDays };\n});\n\nconst stale = withAge\n  .filter(r => r._ageDays >= STALE_AFTER_DAYS)\n  .sort((a, b) => b._ageDays - a._ageDays)\n  .slice(0, MAX_ITEMS_PER_RUN);\n\nreturn stale.map(r => ({ json: { item: r.item, category: r.category, store: r.store, product_url: r.product_url || '' } }));"
       },
       "id": "code-select-stale",
       "name": "Select Stale Items",
@@ -100,19 +100,85 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "=https://REPLACE_WITH_PRICE_SOURCE/{{ encodeURIComponent($json.store) }}/{{ encodeURIComponent($json.item) }}",
-        "options": {}
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.product_url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        }
       },
-      "id": "http-fetch-source",
-      "name": "Fetch Price Source (PLACEHOLDER)",
+      "id": "if-has-product-url",
+      "name": "Has Product URL?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -480,
+        -320
+      ],
+      "notes": "Open Decision #1, resolved 2026-07-31: hybrid \u2014 use a known product-page URL when Catalog has one, fall back to a general web search otherwise. Populate the optional Catalog.product_url column over time; items without one always take the search branch."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.product_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "http-fetch-known-url",
+      "name": "Fetch Known Product Page",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -480,
-        -260
+        -260,
+        -400
       ],
-      "notes": "Open Decision #1 (household-ledger-architecture.md \u00a78): known store product-page URL per item, or a general web-search API? Stubbed either way \u2014 wire once decided."
+      "notes": "Known-URL branch \u2014 most reliable, since it hits a stable page rather than a search result. Costco product pages may not show member pricing without an authenticated session; a scrape returning a blank/missing price there is expected, not a bug, and Validate Extraction will correctly reject it."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.search.brave.com/res/v1/web/search?q={{ encodeURIComponent($json.item + ' price ' + $json.store) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "http-search-fallback",
+      "name": "Search Web for Price",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -260,
+        -160
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_SEARCH_API_CREDENTIAL_ID",
+          "name": "Brave Search API Key (Household Ledger)"
+        }
+      },
+      "notes": "Search-fallback branch, used only when Catalog has no product_url for this item/store. Brave Search API chosen for its simple single-header-auth REST shape; swap providers here if preferred \u2014 nothing downstream depends on Brave specifically. Expect a materially higher extraction failure/mismatch rate than the known-URL branch (see Validate Extraction's notes)."
     },
     {
       "parameters": {
@@ -122,15 +188,15 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ {\n  \"model\": \"claude-sonnet-5\",\n  \"max_tokens\": 300,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Extract the current price for '\" + $json.item + \"' at \" + $json.store + \" from this page content. Respond with ONLY a JSON object: {\\\"store\\\": string, \\\"item\\\": string, \\\"price\\\": number, \\\"unit_price\\\": number|null, \\\"size\\\": string|null, \\\"unit_label\\\": string|null}. No prose, no markdown fences.\\n\\nPAGE CONTENT:\\n\" + $('Fetch Price Source (PLACEHOLDER)').first().json.data\n  }]\n} }}",
+        "jsonBody": "={{ {\n  \"model\": \"claude-sonnet-5\",\n  \"max_tokens\": 300,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Extract the current price for '\" + $('Loop Over Stale Items').first().json.item + \"' at \" + $('Loop Over Stale Items').first().json.store + \" from this page content (this may be a store product page, or a general web search result page \u2014 look for the most likely official current price either way). Respond with ONLY a JSON object: {\\\"store\\\": string, \\\"item\\\": string, \\\"price\\\": number, \\\"unit_price\\\": number|null, \\\"size\\\": string|null, \\\"unit_label\\\": string|null}. No prose, no markdown fences.\\n\\nPAGE CONTENT:\\n\" + $json.data\n  }]\n} }}",
         "options": {}
       },
       "id": "http-extract-llm",
-      "name": "Extract Price via LLM (PLACEHOLDER)",
+      "name": "Extract Price via LLM",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -260,
+        -40,
         -260
       ],
       "credentials": {
@@ -139,7 +205,7 @@
           "name": "Anthropic API Key (Household Ledger)"
         }
       },
-      "notes": "Structured-JSON-only extraction per CLAUDE.md's 'never free text' rule. Same shape ME101 uses for its equivalent agent (~38.5% early failure rate there per the Master Work Log) \u2014 validation happens in the next node, not here."
+      "notes": "Structured-JSON-only extraction per CLAUDE.md's 'never free text' rule. Same shape ME101 uses for its equivalent agent (~38.5% early failure rate there per the Master Work Log) \u2014 validation happens in the next node, not here. Reads $json.data generically since either upstream branch (known-URL fetch or search fallback) can feed this node."
     },
     {
       "parameters": {
@@ -414,25 +480,54 @@
         [],
         [
           {
-            "node": "Fetch Price Source (PLACEHOLDER)",
+            "node": "Has Product URL?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Fetch Price Source (PLACEHOLDER)": {
+    "Has Product URL?": {
       "main": [
         [
           {
-            "node": "Extract Price via LLM (PLACEHOLDER)",
+            "node": "Fetch Known Product Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search Web for Price",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Extract Price via LLM (PLACEHOLDER)": {
+    "Fetch Known Product Page": {
+      "main": [
+        [
+          {
+            "node": "Extract Price via LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Web for Price": {
+      "main": [
+        [
+          {
+            "node": "Extract Price via LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Price via LLM": {
       "main": [
         [
           {

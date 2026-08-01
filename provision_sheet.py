@@ -43,7 +43,7 @@ TOKEN_FILE = Path(os.environ.get("TOKEN_PATH", "token.json"))
 SPREADSHEET_TITLE = "Household Ledger"
 
 TABS = {
-    "Catalog": ["item", "category", "store", "price", "unit_price", "size", "unit_label", "last_updated", "confidence"],
+    "Catalog": ["item", "category", "store", "price", "unit_price", "size", "unit_label", "last_updated", "confidence", "product_url"],
     "ShoppingList": ["item", "category", "store", "price", "qty", "cadence", "added_date"],
     "Settings": ["budget", "cadence", "CheckIn_Status", "CheckIn_ResumeURL"],
     "PriceLog": ["item", "store", "price", "date", "status", "scraped_at"],
