@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-01T17:04:17.170Z",
+  "updatedAt": "2026-08-01T17:21:44.649Z",
   "createdAt": "2026-07-31T19:19:10.242Z",
   "id": "Qtd0sU2XfNy8Qznq",
   "name": "Household Ledger - List Budget Webhook Agent",
@@ -139,8 +139,16 @@
           "mode": "name"
         },
         "columns": {
-          "mappingMode": "autoMapInputData",
-          "value": {},
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $json.body.item }}",
+            "category": "={{ $json.body.category }}",
+            "store": "={{ $json.body.store }}",
+            "price": "={{ $json.body.price }}",
+            "qty": "={{ $json.body.qty }}",
+            "cadence": "={{ $json.body.cadence }}",
+            "added_date": "={{ $now.format('yyyy-MM-dd') }}"
+          },
           "matchingColumns": [
             "item"
           ],
@@ -537,6 +545,6 @@
   "staticData": null,
   "nodeGroups": [],
   "pinData": {},
-  "versionId": "0f52522e-c78c-4418-a93f-36f48edaa07a",
+  "versionId": "21e54b1b-45bf-4e35-ae0f-5335ced35615",
   "triggerCount": 1
 }
