@@ -277,30 +277,31 @@ export default function HouseholdLedger() {
   const recurring = CATALOG.filter((i) => /recurring/.test(i.note || ""));
 
   return (
-    <div className="min-h-screen bg-[#FBF7EE] text-[#1F2A1E] font-serif">
+    <div className="min-h-screen bg-[#0F1E3D] text-[#F2F0E6] font-serif">
       <style>{`
         .font-serif { font-family: Georgia, 'Times New Roman', serif; }
         .font-mono-tab { font-family: 'Courier New', Courier, monospace; }
-        .dashed-top { background-image: repeating-linear-gradient(90deg, #C9BFA0 0, #C9BFA0 6px, transparent 6px, transparent 12px); height: 2px; }
+        .dashed-top { background-image: repeating-linear-gradient(90deg, #33456B 0, #33456B 6px, transparent 6px, transparent 12px); height: 2px; }
       `}</style>
 
-      <header className="border-b-2 border-[#1F2A1E] px-6 py-5 flex items-baseline justify-between max-w-5xl mx-auto">
-        <div>
+      <header className="border-b-2 border-[#F2F0E6] px-6 py-5 grid grid-cols-[1fr_auto_1fr] items-center max-w-5xl mx-auto">
+        <div />
+        <div className="text-center">
           <h1 className="text-3xl tracking-tight" style={{ letterSpacing: "-0.01em" }}>
             Household Ledger
           </h1>
-          <p className="text-sm text-[#5B5545] mt-1">
+          <p className="text-sm text-[#B8C2D9] mt-1">
             Alpharetta / Milton, GA · prices from your last Costco &amp; Walmart runs
           </p>
         </div>
-        <div className="text-right text-xs uppercase tracking-widest text-[#8A836B] font-mono-tab flex items-center gap-1.5 justify-end">
+        <div className="text-right text-xs uppercase tracking-widest text-[#93A3C4] font-mono-tab flex items-center gap-1.5 justify-end">
           {syncing ? (
             <>
               <RefreshCw size={12} className="animate-spin" /> Syncing
             </>
           ) : error ? (
             <>
-              <WifiOff size={12} className="text-[#B23A2E]" /> Offline
+              <WifiOff size={12} className="text-[#E8756A]" /> Offline
             </>
           ) : (
             "Synced"
@@ -310,7 +311,7 @@ export default function HouseholdLedger() {
 
       {error && (
         <div className="max-w-5xl mx-auto px-6 pt-4">
-          <div className="border border-[#B23A2E] bg-[#FBEAE7] text-[#B23A2E] text-xs px-3 py-2 rounded-sm">
+          <div className="border border-[#E8756A] bg-[#3D1F1C] text-[#E8756A] text-xs px-3 py-2 rounded-sm">
             {error}
           </div>
         </div>
@@ -319,18 +320,18 @@ export default function HouseholdLedger() {
       <main className="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
         <aside className="space-y-6">
           <div>
-            <label className="block text-xs uppercase tracking-widest text-[#8A836B] mb-2">
+            <label className="block text-xs uppercase tracking-widest text-[#93A3C4] mb-2">
               Cadence
             </label>
-            <div className="flex gap-1 border border-[#D8CFB8] rounded-sm overflow-hidden">
+            <div className="flex gap-1 border border-[#3D5178] rounded-sm overflow-hidden">
               {["Day", "Week", "Month"].map((c) => (
                 <button
                   key={c}
                   onClick={() => setCadence(c)}
                   className={`flex-1 py-1.5 text-sm transition-colors ${
                     cadence === c
-                      ? "bg-[#3B6142] text-[#FBF7EE]"
-                      : "bg-transparent text-[#5B5545] hover:bg-[#F0EADA]"
+                      ? "bg-[#3B6142] text-[#F2F0E6]"
+                      : "bg-transparent text-[#B8C2D9] hover:bg-[#1B2E52]"
                   }`}
                 >
                   {c}
@@ -340,11 +341,11 @@ export default function HouseholdLedger() {
           </div>
 
           <div>
-            <label className="block text-xs uppercase tracking-widest text-[#8A836B] mb-2">
+            <label className="block text-xs uppercase tracking-widest text-[#93A3C4] mb-2">
               Budget ({cadence.toLowerCase()})
             </label>
-            <div className="flex items-center border border-[#D8CFB8] rounded-sm px-3 py-1.5 bg-white">
-              <span className="text-[#5B5545] mr-1 font-mono-tab">$</span>
+            <div className="flex items-center border border-[#3D5178] rounded-sm px-3 py-1.5 bg-[#16264A]">
+              <span className="text-[#B8C2D9] mr-1 font-mono-tab">$</span>
               <input
                 type="number"
                 value={budget}
@@ -352,13 +353,13 @@ export default function HouseholdLedger() {
                 className="w-full outline-none font-mono-tab bg-transparent"
               />
             </div>
-            <p className="text-[10px] text-[#8A836B] mt-1">
+            <p className="text-[10px] text-[#93A3C4] mt-1">
               Loaded from Settings — editing here doesn&apos;t write back yet (Settings sheet isn&apos;t wired for updates).
             </p>
           </div>
 
           <div>
-            <label className="block text-xs uppercase tracking-widest text-[#8A836B] mb-2 flex items-center gap-1">
+            <label className="block text-xs uppercase tracking-widest text-[#93A3C4] mb-2 flex items-center gap-1">
               <Search size={12} /> Find an item
             </label>
             <input
@@ -366,12 +367,12 @@ export default function HouseholdLedger() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="e.g. milk, rice, chips..."
-              className="w-full border border-[#D8CFB8] rounded-sm px-3 py-1.5 bg-white outline-none focus:border-[#3B6142]"
+              className="w-full border border-[#3D5178] rounded-sm px-3 py-1.5 bg-[#16264A] outline-none focus:border-[#6B9E71]"
             />
             {filteredCatalog && (
-              <div className="mt-2 border border-[#D8CFB8] rounded-sm bg-white max-h-56 overflow-auto">
+              <div className="mt-2 border border-[#3D5178] rounded-sm bg-[#16264A] max-h-56 overflow-auto">
                 {filteredCatalog.length === 0 && (
-                  <div className="px-3 py-2 text-sm text-[#8A836B]">No match in the catalog yet.</div>
+                  <div className="px-3 py-2 text-sm text-[#93A3C4]">No match in the catalog yet.</div>
                 )}
                 {filteredCatalog.map((item) => (
                   <button
@@ -380,10 +381,10 @@ export default function HouseholdLedger() {
                       addItem(item);
                       setQuery("");
                     }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-[#F0EADA] flex justify-between items-center border-b border-[#EFE9D8] last:border-0"
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-[#1B2E52] flex justify-between items-center border-b border-[#3D5178] last:border-0"
                   >
                     <span>{item.name}</span>
-                    <span className="font-mono-tab text-[#5B5545]">
+                    <span className="font-mono-tab text-[#B8C2D9]">
                       ${bestStore(item.stores)[1].toFixed(2)}
                     </span>
                   </button>
@@ -393,7 +394,7 @@ export default function HouseholdLedger() {
           </div>
 
           <div>
-            <div className="text-xs uppercase tracking-widest text-[#8A836B] mb-2">
+            <div className="text-xs uppercase tracking-widest text-[#93A3C4] mb-2">
               Browse catalog
             </div>
             <div className="space-y-1">
@@ -415,7 +416,7 @@ export default function HouseholdLedger() {
                         <button
                           key={item.name}
                           onClick={() => addItem(item)}
-                          className="w-full flex justify-between items-center text-left text-sm py-1 px-2 rounded-sm hover:bg-[#F0EADA] group"
+                          className="w-full flex justify-between items-center text-left text-sm py-1 px-2 rounded-sm hover:bg-[#1B2E52] group"
                         >
                           <span className="flex items-center gap-1.5">
                             {item.name}
@@ -425,7 +426,7 @@ export default function HouseholdLedger() {
                           </span>
                           <Plus
                             size={13}
-                            className="opacity-0 group-hover:opacity-100 text-[#3B6142]"
+                            className="opacity-0 group-hover:opacity-100 text-[#6B9E71]"
                           />
                         </button>
                       ))}
@@ -438,7 +439,7 @@ export default function HouseholdLedger() {
 
           {recurring.length > 0 && (
             <div>
-              <div className="text-xs uppercase tracking-widest text-[#8A836B] mb-2">
+              <div className="text-xs uppercase tracking-widest text-[#93A3C4] mb-2">
                 Shows up every trip
               </div>
               <div className="flex flex-wrap gap-1.5">
@@ -446,7 +447,7 @@ export default function HouseholdLedger() {
                   <button
                     key={item.name}
                     onClick={() => addItem(item)}
-                    className="text-xs px-2 py-1 rounded-full border border-[#3B6142] text-[#3B6142] hover:bg-[#3B6142] hover:text-[#FBF7EE] transition-colors"
+                    className="text-xs px-2 py-1 rounded-full border border-[#6B9E71] text-[#6B9E71] hover:bg-[#3B6142] hover:text-[#F2F0E6] transition-colors"
                   >
                     + {item.name}
                   </button>
@@ -458,18 +459,18 @@ export default function HouseholdLedger() {
 
         <section>
           {loading ? (
-            <div className="border border-dashed border-[#D8CFB8] rounded-sm py-16 text-center text-[#8A836B] flex items-center justify-center gap-2">
+            <div className="border border-dashed border-[#3D5178] rounded-sm py-16 text-center text-[#93A3C4] flex items-center justify-center gap-2">
               <RefreshCw size={14} className="animate-spin" /> Loading your list…
             </div>
           ) : list.length === 0 ? (
-            <div className="border border-dashed border-[#D8CFB8] rounded-sm py-16 text-center text-[#8A836B]">
+            <div className="border border-dashed border-[#3D5178] rounded-sm py-16 text-center text-[#93A3C4]">
               Add items from the catalog to start this {cadence.toLowerCase()}&apos;s list.
             </div>
           ) : (
-            <div className="border border-[#1F2A1E] bg-white">
+            <div className="border border-[#F2F0E6] bg-[#16264A]">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-[#1F2A1E] text-left text-xs uppercase tracking-widest text-[#8A836B]">
+                  <tr className="border-b border-[#F2F0E6] text-left text-xs uppercase tracking-widest text-[#93A3C4]">
                     <th className="py-2 px-3 font-normal">Item</th>
                     <th className="py-2 px-3 font-normal">Store</th>
                     <th className="py-2 px-3 font-normal text-center">Qty</th>
@@ -483,7 +484,7 @@ export default function HouseholdLedger() {
                     const storeNames = Object.keys(item.stores);
                     const lowest = bestStore(item.stores)[0];
                     return (
-                      <tr key={item.name} className="border-b border-[#EFE9D8] last:border-0">
+                      <tr key={item.name} className="border-b border-[#3D5178] last:border-0">
                         <td className="py-2 px-3">
                           <div className="flex items-center gap-1.5">
                             {item.name}
@@ -494,7 +495,7 @@ export default function HouseholdLedger() {
                             )}
                           </div>
                           {item.note && !item.sizeUnknown && (
-                            <div className="text-xs text-[#8A836B]">{item.note}</div>
+                            <div className="text-xs text-[#93A3C4]">{item.note}</div>
                           )}
                         </td>
                         <td className="py-2 px-3">
@@ -502,7 +503,7 @@ export default function HouseholdLedger() {
                             <select
                               value={item.store}
                               onChange={(e) => setStoreFor(item.name, e.target.value)}
-                              className="border border-[#D8CFB8] rounded-sm text-xs px-1 py-0.5 bg-white"
+                              className="border border-[#3D5178] rounded-sm text-xs px-1 py-0.5 bg-[#16264A]"
                             >
                               {storeNames.map((s) => (
                                 <option key={s} value={s}>
@@ -511,21 +512,21 @@ export default function HouseholdLedger() {
                               ))}
                             </select>
                           ) : (
-                            <span className="text-xs text-[#5B5545]">{item.store}</span>
+                            <span className="text-xs text-[#B8C2D9]">{item.store}</span>
                           )}
                         </td>
                         <td className="py-2 px-3">
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => setQty(item.name, item.qty - 1)}
-                              className="p-0.5 border border-[#D8CFB8] rounded-sm hover:bg-[#F0EADA]"
+                              className="p-0.5 border border-[#3D5178] rounded-sm hover:bg-[#1B2E52]"
                             >
                               <Minus size={11} />
                             </button>
                             <span className="w-5 text-center font-mono-tab">{item.qty}</span>
                             <button
                               onClick={() => setQty(item.name, item.qty + 1)}
-                              className="p-0.5 border border-[#D8CFB8] rounded-sm hover:bg-[#F0EADA]"
+                              className="p-0.5 border border-[#3D5178] rounded-sm hover:bg-[#1B2E52]"
                             >
                               <Plus size={11} />
                             </button>
@@ -534,7 +535,7 @@ export default function HouseholdLedger() {
                         <td className="py-2 px-3 text-right font-mono-tab">
                           ${item.price.toFixed(2)}
                           {unitPriceOf(item.stores[item.store]) !== null && (
-                            <div className="text-[10px] text-[#8A836B]">
+                            <div className="text-[10px] text-[#93A3C4]">
                               {unitLabelOf(item.stores[item.store])}{" "}
                               {unitPriceOf(item.stores[item.store]).toFixed(2)}
                             </div>
@@ -546,7 +547,7 @@ export default function HouseholdLedger() {
                         <td className="py-2 px-2 text-right">
                           <button
                             onClick={() => removeItem(item.name)}
-                            className="text-[#8A836B] hover:text-[#B23A2E]"
+                            className="text-[#93A3C4] hover:text-[#E8756A]"
                           >
                             <X size={14} />
                           </button>
@@ -569,8 +570,8 @@ export default function HouseholdLedger() {
                   <span>${adjustedBudget.toFixed(2)}</span>
                 </div>
                 <div
-                  className={`flex justify-between text-base pt-1 border-t border-dashed border-[#D8CFB8] ${
-                    over ? "text-[#B23A2E]" : "text-[#3B6142]"
+                  className={`flex justify-between text-base pt-1 border-t border-dashed border-[#3D5178] ${
+                    over ? "text-[#E8756A]" : "text-[#6B9E71]"
                   }`}
                 >
                   <span>{over ? "Over budget" : "Remaining"}</span>
@@ -580,7 +581,7 @@ export default function HouseholdLedger() {
             </div>
           )}
 
-          <div className="mt-4 text-xs text-[#8A836B] flex items-start gap-1.5">
+          <div className="mt-4 text-xs text-[#93A3C4] flex items-start gap-1.5">
             <AlertTriangle size={12} className="mt-0.5 shrink-0 text-[#C98A2C]" />
             <span>
               Items marked with a caution icon have a price from both stores, but at least one

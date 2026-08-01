@@ -1,5 +1,11 @@
 {
+  "updatedAt": "2026-08-01T16:53:51.005Z",
+  "createdAt": "2026-07-31T20:31:42.263Z",
+  "id": "dchQzNYGtOnqlZQ8",
   "name": "Household Ledger - Price Refresh Agent (SCAFFOLD, not deployed)",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {
@@ -7,13 +13,13 @@
         "height": 620,
         "width": 460
       },
-      "id": "note-1",
+      "id": "df57213c-7868-47a3-8562-a24af8ea6976",
       "name": "Setup Notes",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        -1400,
-        -680
+        -432,
+        -704
       ]
     },
     {
@@ -21,21 +27,19 @@
         "rule": {
           "interval": [
             {
-              "field": "days",
               "daysInterval": 7,
-              "triggerAtHour": 6,
-              "triggerAtMinute": 0
+              "triggerAtHour": 6
             }
           ]
         }
       },
-      "id": "trigger-1",
+      "id": "4f53231a-14b8-4a39-a939-47dfe5f87bf3",
       "name": "Weekly Refresh Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -1400,
-        -160
+        -240,
+        192
       ],
       "notes": "Weekly by default \u2014 CLAUDE.md flags the n8n plan's monthly execution cap (~55 items x 2 stores adds up fast if scheduled too often). Adjust once real usage shows how often prices actually move."
     },
@@ -56,17 +60,17 @@
         },
         "options": {}
       },
-      "id": "sheets-get-catalog",
+      "id": "4818e42d-25e1-4476-814f-ce69fc5a0f1a",
       "name": "Get Catalog",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        -1160,
-        -320
+        0,
+        -16
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "id": "zz9INbfV79dYEmQl",
           "name": "Google Sheets account"
         }
       }
@@ -75,27 +79,26 @@
       "parameters": {
         "jsCode": "// Same gap/staleness-detection shape as BNS's 'Check Buffer & Prepare Generator Input'.\nconst STALE_AFTER_DAYS = 14;\nconst MAX_ITEMS_PER_RUN = 20; // respects the monthly execution-cap warning in CLAUDE.md\n\nconst rows = $input.all().map(i => i.json);\nconst now = DateTime.now();\n\nconst withAge = rows.map(r => {\n  const lu = r.last_updated ? DateTime.fromISO(String(r.last_updated)) : null;\n  const ageDays = lu && lu.isValid ? now.diff(lu, 'days').days : Infinity; // blank/invalid = infinitely stale\n  return { ...r, _ageDays: ageDays };\n});\n\nconst stale = withAge\n  .filter(r => r._ageDays >= STALE_AFTER_DAYS)\n  .sort((a, b) => b._ageDays - a._ageDays)\n  .slice(0, MAX_ITEMS_PER_RUN);\n\nreturn stale.map(r => ({ json: { item: r.item, category: r.category, store: r.store, product_url: r.product_url || '' } }));"
       },
-      "id": "code-select-stale",
+      "id": "025a295a-159d-46e8-bf72-870d4def866d",
       "name": "Select Stale Items",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -940,
-        -320
+        224,
+        -16
       ]
     },
     {
       "parameters": {
-        "batchSize": 1,
         "options": {}
       },
-      "id": "loop-items",
+      "id": "840f672e-3181-4477-9179-fb62118d0d8e",
       "name": "Loop Over Stale Items",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        -720,
-        -320
+        448,
+        -16
       ]
     },
     {
@@ -104,7 +107,8 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 1
           },
           "conditions": [
             {
@@ -115,22 +119,23 @@
                 "operation": "notEquals"
               }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "if-has-product-url",
+      "id": "3da93b91-28ff-4d26-b7cd-2a48bec6e93f",
       "name": "Has Product URL?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -480,
-        -320
+        720,
+        0
       ],
       "notes": "Open Decision #1, resolved 2026-07-31: hybrid \u2014 use a known product-page URL when Catalog has one, fall back to a general web search otherwise. Populate the optional Catalog.product_url column over time; items without one always take the search branch."
     },
     {
       "parameters": {
-        "method": "GET",
         "url": "={{ $json.product_url }}",
         "options": {
           "response": {
@@ -140,19 +145,18 @@
           }
         }
       },
-      "id": "http-fetch-known-url",
+      "id": "584d0247-c33c-4818-bf29-b34b61e28aca",
       "name": "Fetch Known Product Page",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -260,
-        -400
+        672,
+        -256
       ],
       "notes": "Known-URL branch \u2014 most reliable, since it hits a stable page rather than a search result. Costco product pages may not show member pricing without an authenticated session; a scrape returning a blank/missing price there is expected, not a bug, and Validate Extraction will correctly reject it."
     },
     {
       "parameters": {
-        "method": "GET",
         "url": "=https://api.search.brave.com/res/v1/web/search?q={{ encodeURIComponent($json.item + ' price ' + $json.store) }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
@@ -173,17 +177,17 @@
           }
         }
       },
-      "id": "http-search-fallback",
+      "id": "85a28833-0ce8-4cc2-8757-912403f4794d",
       "name": "Search Web for Price",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -260,
-        -160
+        912,
+        176
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE_WITH_SEARCH_API_CREDENTIAL_ID",
+          "id": "59FRMM18obRPeiiM",
           "name": "Brave Search API Key (Household Ledger)"
         }
       },
@@ -209,18 +213,18 @@
         "jsonBody": "={{ {\n  \"model\": \"claude-sonnet-5\",\n  \"max_tokens\": 300,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": \"Extract the current price for '\" + $('Loop Over Stale Items').first().json.item + \"' at \" + $('Loop Over Stale Items').first().json.store + \" from this page content (this may be a store product page, or a general web search result page \u2014 look for the most likely official current price either way). Respond with ONLY a JSON object: {\\\"store\\\": string, \\\"item\\\": string, \\\"price\\\": number, \\\"unit_price\\\": number|null, \\\"size\\\": string|null, \\\"unit_label\\\": string|null}. No prose, no markdown fences.\\n\\nPAGE CONTENT:\\n\" + $json.data\n  }]\n} }}",
         "options": {}
       },
-      "id": "http-extract-llm",
+      "id": "6ff6443f-286b-480b-a239-1807cef1bfdb",
       "name": "Extract Price via LLM",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -40,
-        -260
+        1280,
+        176
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "REPLACE_WITH_ANTHROPIC_CREDENTIAL_ID",
-          "name": "Anthropic API Key (Household Ledger)"
+          "id": "lTKsfwWFUX0Yh2iJ",
+          "name": "Antrhopic API Key"
         }
       },
       "notes": "Structured-JSON-only extraction per CLAUDE.md's 'never free text' rule. Same shape ME101 uses for its equivalent agent (~38.5% early failure rate there per the Master Work Log) \u2014 validation happens in the next node, not here. Reads $json.data generically since either upstream branch (known-URL fetch or search fallback) can feed this node. Confirmed live 2026-07-31: Anthropic's Messages API 400s without an anthropic-version header, which isn't part of the API-key credential itself \u2014 hence the explicit header above."
@@ -229,13 +233,13 @@
       "parameters": {
         "jsCode": "// Validates the LLM's extraction against the required schema before it's trusted at all.\n// Never a bare scrape-and-trust path, per CLAUDE.md.\nconst item = $('Loop Over Stale Items').first().json;\nlet parsed;\ntry {\n  const raw = $input.first().json.content?.[0]?.text ?? '';\n  parsed = JSON.parse(raw);\n} catch (e) {\n  return [{ json: { valid: false, item: item.item, store: item.store, reason: 'unparseable JSON from extraction' } }];\n}\n\nconst priceOk = typeof parsed.price === 'number' && parsed.price > 0;\nconst storeOk = typeof parsed.store === 'string' && parsed.store.length > 0;\nconst itemOk = typeof parsed.item === 'string' && parsed.item.length > 0;\n\nif (!priceOk || !storeOk || !itemOk) {\n  return [{ json: { valid: false, item: item.item, store: item.store, reason: 'missing/invalid required field', raw: parsed } }];\n}\n\nreturn [{ json: { valid: true, ...parsed } }];"
       },
-      "id": "code-validate",
+      "id": "2042cb76-63c8-47e1-94d7-99a5f7bde3d8",
       "name": "Validate Extraction",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -40,
-        -260
+        1120,
+        -96
       ]
     },
     {
@@ -244,7 +248,8 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "loose"
+            "typeValidation": "loose",
+            "version": 1
           },
           "conditions": [
             {
@@ -255,16 +260,18 @@
                 "operation": "equals"
               }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "if-valid",
+      "id": "bfddaeed-fd05-4f9e-a82d-74c986c14609",
       "name": "Extraction Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        180,
-        -260
+        1312,
+        -80
       ]
     },
     {
@@ -289,35 +296,94 @@
             "date": "={{ $today.format('yyyy-MM-dd') }}",
             "status": "pending",
             "scraped_at": "={{ $now.toISO() }}"
-          }
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "item",
+              "displayName": "item",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "store",
+              "displayName": "store",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scraped_at",
+              "displayName": "scraped_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
-      "id": "sheets-append-pricelog",
+      "id": "3b6d5df5-61a9-4f33-a74e-9545a7e64afd",
       "name": "Stage in PriceLog as Pending",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        400,
-        -340
+        1568,
+        -96
       ],
-      "notes": "Uses the proposed status/scraped_at schema extension \u2014 see Setup Notes. This is the 'stage' half of the 24-48h freshness gate; Catalog itself isn't touched here.",
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "id": "zz9INbfV79dYEmQl",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "notes": "Uses the proposed status/scraped_at schema extension \u2014 see Setup Notes. This is the 'stage' half of the 24-48h freshness gate; Catalog itself isn't touched here."
     },
     {
       "parameters": {},
-      "id": "noop-log-failure",
+      "id": "427e8f6b-cb5a-4d52-be8a-ee8204a46f18",
       "name": "Log Extraction Failure (v1)",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        400,
-        -160
+        1568,
+        192
       ],
       "notes": "v1: no persistent failure log, no retry \u2014 same 'acceptable for v1, revisit later' shape as the existing Webhook Agent's Delete Row node. A v2 could append to a failures sheet or alert via Telegram after N consecutive failures for the same item."
     },
@@ -338,17 +404,17 @@
         },
         "options": {}
       },
-      "id": "sheets-get-pricelog",
+      "id": "92cdce06-bc58-4432-98ac-b951fe05e8da",
       "name": "Get All PriceLog Rows",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        -1160,
-        40
+        0,
+        384
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "id": "zz9INbfV79dYEmQl",
           "name": "Google Sheets account"
         }
       }
@@ -357,13 +423,13 @@
       "parameters": {
         "jsCode": "// 24-48h freshness gate (CLAUDE.md / architecture.md Section 5): a newly scraped price\n// isn't trusted into Catalog until it's sat unchallenged for PROMOTE_AFTER_HOURS, and only\n// if no newer scrape for the same item+store has landed since (which would supersede it).\nconst PROMOTE_AFTER_HOURS = 36; // middle of the 24-48h range CLAUDE.md specifies; adjust as needed\n\nconst rows = $input.all().map(i => i.json).filter(r => r.item && r.store);\nconst now = DateTime.now();\n\n// Latest row per item+store\nconst latestByKey = new Map();\nfor (const r of rows) {\n  const key = `${r.item}::${r.store}`;\n  const scrapedAt = r.scraped_at ? DateTime.fromISO(String(r.scraped_at)) : null;\n  const existing = latestByKey.get(key);\n  if (!existing || (scrapedAt && scrapedAt > existing._scrapedAt)) {\n    latestByKey.set(key, { ...r, _scrapedAt: scrapedAt });\n  }\n}\n\nconst ready = [];\nfor (const row of latestByKey.values()) {\n  if (row.status !== 'pending') continue;\n  if (!row._scrapedAt || !row._scrapedAt.isValid) continue;\n  const ageHours = now.diff(row._scrapedAt, 'hours').hours;\n  if (ageHours >= PROMOTE_AFTER_HOURS) {\n    ready.push({ item: row.item, store: row.store, price: row.price, date: row.date });\n  }\n}\n\nreturn ready.map(r => ({ json: r }));"
       },
-      "id": "code-find-promotable",
+      "id": "e074c097-0ed3-4049-a156-385810023125",
       "name": "Find Entries Ready to Promote",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -940,
-        40
+        224,
+        384
       ]
     },
     {
@@ -386,26 +452,137 @@
             "store": "={{ $json.store }}",
             "price": "={{ $json.price }}",
             "last_updated": "={{ $today.format('yyyy-MM-dd') }}",
-            "confidence": "web-search"
+            "confidence": "web-search",
+            "row_number": 0
           },
           "matchingColumns": [
             "item",
             "store"
-          ]
+          ],
+          "schema": [
+            {
+              "id": "item",
+              "displayName": "item",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "store",
+              "displayName": "store",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "unit_price",
+              "displayName": "unit_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "size",
+              "displayName": "size",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "unit_label",
+              "displayName": "unit_label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "last_updated",
+              "displayName": "last_updated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "product_url",
+              "displayName": "product_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
-      "id": "sheets-update-catalog",
+      "id": "35315d6a-4984-41c6-9052-1c5d9a28cbca",
       "name": "Promote Price into Catalog",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        -720,
-        40
+        448,
+        384
       ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "id": "zz9INbfV79dYEmQl",
           "name": "Google Sheets account"
         }
       }
@@ -428,30 +605,103 @@
           "value": {
             "item": "={{ $json.item }}",
             "store": "={{ $json.store }}",
-            "status": "promoted"
+            "status": "promoted",
+            "row_number": 0
           },
           "matchingColumns": [
             "item",
             "store"
-          ]
+          ],
+          "schema": [
+            {
+              "id": "item",
+              "displayName": "item",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "store",
+              "displayName": "store",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scraped_at",
+              "displayName": "scraped_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
-      "id": "sheets-mark-promoted",
+      "id": "4b00cd33-3d9b-4b27-8ab4-9e064e9e2b5b",
       "name": "Mark PriceLog Entry Promoted",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        -500,
-        40
+        672,
+        384
       ],
-      "notes": "Prevents this same entry being re-promoted on next week's run.",
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "id": "zz9INbfV79dYEmQl",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "notes": "Prevents this same entry being re-promoted on next week's run."
     }
   ],
   "connections": {
@@ -648,10 +898,18 @@
     "timeSavedMode": "fixed",
     "callerPolicy": "workflowsFromSameOwner"
   },
+  "staticData": {
+    "node:Weekly Refresh Trigger": {
+      "recurrenceRules": [
+        213
+      ],
+      "recurrenceRuleSignatures": [
+        "days:7"
+      ]
+    }
+  },
+  "nodeGroups": [],
   "pinData": {},
-  "active": false,
-  "triggerCount": 1,
-  "meta": {
-    "templateCredsSetupCompleted": false
-  }
+  "versionId": "6141b47e-415e-4866-b62c-b12b152414f7",
+  "triggerCount": 1
 }
