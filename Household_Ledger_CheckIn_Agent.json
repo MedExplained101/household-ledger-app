@@ -230,7 +230,7 @@
     },
     {
       "parameters": {
-        "operation": "update",
+        "operation": "appendOrUpdate",
         "documentId": {
           "__rl": true,
           "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
@@ -257,6 +257,7 @@
         },
         "options": {}
       },
+      "notes": "operation must be appendOrUpdate, not update -- Inventory starts with zero rows, so any item reported via check-in for the first time has no existing row to 'update' and update silently does nothing. Found live 2026-08-01 when a real FINISHED/LOW reply produced no visible change in the Sheet.",
       "id": "sheets-update-inventory",
       "name": "Update Inventory Rows",
       "type": "n8n-nodes-base.googleSheets",
