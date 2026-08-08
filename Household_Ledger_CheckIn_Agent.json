@@ -1,9 +1,9 @@
 {
-  "name": "Household Ledger - Check-In Agent (SCAFFOLD, not deployed)",
+  "name": "Household Ledger - Check-In Agent",
   "nodes": [
     {
       "parameters": {
-        "content": "## SCAFFOLD \u2014 NOT DEPLOYED\nModeled on BNS's Telegram Approval Listener pause/resume mechanism (read directly from beautifulnaturescenes-/beautiful_naturescenes_telegram_approval_listener_workflow.json to reuse the real shape, not invent a new one) plus architecture.md \u00a76's Check-In Agent spec. This is the SENDER half \u2014 a companion listener workflow (Household_Ledger_CheckIn_Reply_Listener.json) must run 24/7 alongside this one.\n\nSCHEMA EXTENSION NEEDED: `Settings` (currently budget/cadence, single row) needs two more columns for the pause/resume mechanism: `CheckIn_Status` (idle/pending) and `CheckIn_ResumeURL`. This mirrors BNS's own Calendar.Status/ResumeURL columns, just on the single-row Settings tab instead of a per-day Calendar row, since there's only ever one household to check in on at a time.\n\nIMPROVEMENT ON THE SOURCE PATTERN: BNS's own exported main workflow JSON doesn't actually include the node that captures `$execution.resumeUrl` and writes it to the sheet before the Wait node fires \u2014 that connective step is missing even in their template. This scaffold adds it explicitly ('Store Resume URL + Pending State' below) rather than silently copying the same gap forward.\n\nSETUP TODOs:\n1. Replace `documentId`/credentials placeholders.\n2. Resolve Open Decision #3 (architecture.md \u00a78): same Telegram bot as budget alerts / BNS's Approval bot, or a separate one?\n3. Resolve Open Decision #4: every-2-days is architecture.md's stated default \u2014 confirm or change the Schedule Trigger below.\n4. Auto-add-to-list step does a Catalog lookup for the cheapest store, same logic as the app's own bestStore() function in src/App.jsx \u2014 kept in sync manually for now; a future version could extract that into a shared function.",
+        "content": "## DEPLOYED \u2014 live in n8n since 2026-07-31\nModeled on BNS's Telegram Approval Listener pause/resume mechanism (read directly from beautifulnaturescenes-/beautiful_naturescenes_telegram_approval_listener_workflow.json to reuse the real shape, not invent a new one) plus architecture.md \u00a76's Check-In Agent spec. This is the SENDER half \u2014 a companion listener workflow (Household_Ledger_CheckIn_Reply_Listener.json) runs 24/7 alongside this one.\n\nSCHEMA EXTENSION: `Settings` carries two extra columns for the pause/resume mechanism: `CheckIn_Status` (idle/pending) and `CheckIn_ResumeURL`. Mirrors BNS's own Calendar.Status/ResumeURL columns, just on the single-row Settings tab instead of a per-day Calendar row, since there's only ever one household to check in on at a time. Live via `provision_sheet.py`.\n\nIMPROVEMENT ON THE SOURCE PATTERN: BNS's own exported main workflow JSON doesn't actually include the node that captures `$execution.resumeUrl` and writes it to the sheet before the Wait node fires \u2014 that connective step is missing even in their template. This scaffold adds it explicitly ('Store Resume URL + Pending State' below) rather than silently copying the same gap forward.\n\nSTATUS: real `documentId`, chat ID, Google Sheets credential, and Telegram bot credential all wired; workflow published. Open Decision #4 (cadence) resolved 2026-08-01 \u2014 every 3 days. Not yet live-tested end-to-end.\n\nAuto-add-to-list step does a Catalog lookup for the cheapest store, same logic as the app's own bestStore() function in src/App.jsx \u2014 kept in sync manually for now; a future version could extract that into a shared function.",
         "height": 620,
         "width": 480
       },
@@ -22,7 +22,7 @@
           "interval": [
             {
               "field": "days",
-              "daysInterval": 2,
+              "daysInterval": 3,
               "triggerAtHour": 18,
               "triggerAtMinute": 0
             }
@@ -30,14 +30,14 @@
         }
       },
       "id": "trigger-1",
-      "name": "Check-In Trigger (every 2 days)",
+      "name": "Check-In Trigger (every 3 days)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
         -1600,
         -120
       ],
-      "notes": "Default cadence per architecture.md Open Decision #4 \u2014 change daysInterval to 1 or 3 if Graham prefers."
+      "notes": "Open Decision #4 resolved 2026-08-01: every 3 days, chosen over the 2-day default and daily."
     },
     {
       "parameters": {
@@ -126,9 +126,13 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
+            "row_number": 2,
             "CheckIn_Status": "pending",
             "CheckIn_ResumeURL": "={{ $execution.resumeUrl }}"
-          }
+          },
+          "matchingColumns": [
+            "row_number"
+          ]
         },
         "options": {}
       },
@@ -151,6 +155,7 @@
     {
       "parameters": {
         "resume": "webhook",
+        "httpMethod": "POST",
         "limitWaitTime": true,
         "limitType": "afterTimeInterval",
         "resumeAmount": 48,
@@ -164,7 +169,7 @@
         -500,
         -120
       ],
-      "notes": "Resumes when Household_Ledger_CheckIn_Reply_Listener.json calls this execution's resume URL. Times out after 48h if no reply \u2014 falls through with no lowItems/finishedItems, handled gracefully by the next Code node."
+      "notes": "Resumes when Household_Ledger_CheckIn_Reply_Listener.json calls this execution's resume URL. Times out after 48h if no reply \u2014 falls through with no lowItems/finishedItems, handled gracefully by the next Code node. httpMethod must be POST to match Call Resume Webhook's POST call (it needs a body for lowItems/finishedItems) \u2014 left unset originally, which silently defaulted to GET and caused every resume attempt to 404 with 'no waiting webhook with a matching path/method' (found live 2026-08-08)."
     },
     {
       "parameters": {
@@ -213,12 +218,13 @@
     },
     {
       "parameters": {
-        "jsCode": "// Computes the Inventory row updates for items marked low/finished in the reply,\n// including the running avg_days_to_finish per architecture.md Section 6 step 4.\nconst { lowItems, finishedItems } = $('Read Parsed Reply').first().json;\nconst rows = $input.all().map(i => i.json);\nconst byItem = new Map(rows.map(r => [r.item, r]));\nconst today = DateTime.now().toFormat('yyyy-MM-dd');\nconst updates = [];\n\nfor (const name of lowItems) {\n  const row = byItem.get(name);\n  if (!row) continue;\n  updates.push({ item: name, status: 'low', last_purchased_date: row.last_purchased_date,\n                 last_finished_date: row.last_finished_date, avg_days_to_finish: row.avg_days_to_finish,\n                 cycle_count: row.cycle_count });\n}\n\nfor (const name of finishedItems) {\n  const row = byItem.get(name);\n  if (!row) continue;\n  const purchased = row.last_purchased_date ? DateTime.fromFormat(String(row.last_purchased_date), 'yyyy-MM-dd') : null;\n  const daysElapsed = purchased && purchased.isValid ? DateTime.now().diff(purchased, 'days').days : null;\n  const prevAvg = Number(row.avg_days_to_finish) || null;\n  const prevCycles = Number(row.cycle_count) || 0;\n  // Simple running average, same style as BNS's recency-window logic.\n  const newAvg = daysElapsed == null ? prevAvg\n    : (prevAvg == null ? daysElapsed : ((prevAvg * prevCycles) + daysElapsed) / (prevCycles + 1));\n  updates.push({ item: name, status: 'finished', last_purchased_date: row.last_purchased_date,\n                 last_finished_date: today, avg_days_to_finish: newAvg ? Math.round(newAvg * 10) / 10 : '',\n                 cycle_count: prevCycles + 1 });\n}\n\nreturn updates.map(u => ({ json: u }));"
+        "jsCode": "// Computes the Inventory row updates for items marked low/finished in the reply,\n// including the running avg_days_to_finish per architecture.md Section 6 step 4.\n// Items with no existing Inventory row (first time this item has ever been reported)\n// get a fresh row with no history yet, instead of being silently dropped -- Inventory\n// starts empty, so every item's FIRST check-in mention is necessarily this case.\n// Found live 2026-08-08: the old 'if (!row) continue' skipped every item on Inventory's\n// first-ever real reply, making Update Inventory Rows' appendOrUpdate mode unreachable.\nconst { lowItems, finishedItems } = $('Read Parsed Reply').first().json;\nconst rows = $input.all().map(i => i.json);\nconst byItem = new Map(rows.filter(r => r.item).map(r => [r.item, r]));\nconst today = DateTime.now().toFormat('yyyy-MM-dd');\nconst updates = [];\n\nfor (const name of lowItems) {\n  const row = byItem.get(name);\n  if (!row) {\n    updates.push({ item: name, status: 'low', last_purchased_date: '', last_finished_date: '',\n                   avg_days_to_finish: '', cycle_count: 0 });\n    continue;\n  }\n  updates.push({ item: name, status: 'low', last_purchased_date: row.last_purchased_date,\n                 last_finished_date: row.last_finished_date, avg_days_to_finish: row.avg_days_to_finish,\n                 cycle_count: row.cycle_count });\n}\n\nfor (const name of finishedItems) {\n  const row = byItem.get(name);\n  if (!row) {\n    updates.push({ item: name, status: 'finished', last_purchased_date: '', last_finished_date: today,\n                   avg_days_to_finish: '', cycle_count: 1 });\n    continue;\n  }\n  const purchased = row.last_purchased_date ? DateTime.fromFormat(String(row.last_purchased_date), 'yyyy-MM-dd') : null;\n  const daysElapsed = purchased && purchased.isValid ? DateTime.now().diff(purchased, 'days').days : null;\n  const prevAvg = Number(row.avg_days_to_finish) || null;\n  const prevCycles = Number(row.cycle_count) || 0;\n  // Simple running average, same style as BNS's recency-window logic.\n  const newAvg = daysElapsed == null ? prevAvg\n    : (prevAvg == null ? daysElapsed : ((prevAvg * prevCycles) + daysElapsed) / (prevCycles + 1));\n  updates.push({ item: name, status: 'finished', last_purchased_date: row.last_purchased_date,\n                 last_finished_date: today, avg_days_to_finish: newAvg ? Math.round(newAvg * 10) / 10 : '',\n                 cycle_count: prevCycles + 1 });\n}\n\nreturn updates.map(u => ({ json: u }));"
       },
       "id": "code-compute-inventory-updates",
       "name": "Compute Inventory Updates",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "alwaysOutputData": true,
       "position": [
         160,
         -220
@@ -226,7 +232,37 @@
     },
     {
       "parameters": {
-        "operation": "update",
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.item }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-has-inventory-updates",
+      "name": "Has Inventory Updates?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        270,
+        -300
+      ],
+      "notes": "Guards against writing a blank Inventory row from the alwaysOutputData {} placeholder when a reply had no low/finished items (e.g. a 'NONE' reply) -- found live 2026-08-08 alongside the same-class Resolve Auto-Add Rows gap."
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
         "documentId": {
           "__rl": true,
           "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
@@ -253,6 +289,7 @@
         },
         "options": {}
       },
+      "notes": "operation must be appendOrUpdate, not update -- Inventory starts with zero rows, so any item reported via check-in for the first time has no existing row to 'update' and update silently does nothing. Found live 2026-08-01 when a real FINISHED/LOW reply produced no visible change in the Sheet.",
       "id": "sheets-update-inventory",
       "name": "Update Inventory Rows",
       "type": "n8n-nodes-base.googleSheets",
@@ -308,10 +345,41 @@
       "name": "Resolve Auto-Add Rows",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
+      "alwaysOutputData": true,
       "position": [
         380,
         20
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.item }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-has-auto-add-items",
+      "name": "Has Auto-Add Items?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        490,
+        20
+      ],
+      "notes": "Guards against writing a blank ShoppingList row from the alwaysOutputData {} placeholder when nothing in the reply matched a real Catalog item -- found live 2026-08-08."
     },
     {
       "parameters": {
@@ -443,9 +511,13 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
+            "row_number": 2,
             "CheckIn_Status": "idle",
             "CheckIn_ResumeURL": ""
-          }
+          },
+          "matchingColumns": [
+            "row_number"
+          ]
         },
         "options": {}
       },
@@ -563,7 +635,25 @@
       "main": [
         [
           {
+            "node": "Has Inventory Updates?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Inventory Updates?": {
+      "main": [
+        [
+          {
             "node": "Update Inventory Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Both Branches",
             "type": "main",
             "index": 0
           }
@@ -585,9 +675,27 @@
       "main": [
         [
           {
+            "node": "Has Auto-Add Items?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Auto-Add Items?": {
+      "main": [
+        [
+          {
             "node": "Get Settings (for cadence)",
             "type": "main",
             "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Both Branches",
+            "type": "main",
+            "index": 1
           }
         ]
       ]

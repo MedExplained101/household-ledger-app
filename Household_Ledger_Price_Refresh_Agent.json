@@ -191,7 +191,7 @@
           "name": "Brave Search API Key (Household Ledger)"
         }
       },
-      "notes": "Search-fallback branch, used only when Catalog has no product_url for this item/store. Brave Search API chosen for its simple single-header-auth REST shape; swap providers here if preferred \u2014 nothing downstream depends on Brave specifically. Expect a materially higher extraction failure/mismatch rate than the known-URL branch (see Validate Extraction's notes)."
+      "notes": "Search-fallback branch, used only when Catalog has no product_url for this item/store. Brave Search API chosen for its simple single-header-auth REST shape; swap providers here if preferred \u2014 nothing downstream depends on Brave specifically. Expect a materially higher extraction failure/mismatch rate than the known-URL branch (see Validate Extraction's notes). Confirmed live 2026-07-31: Brave's API 422s on n8n's default multi-type Accept header, hence the explicit Accept: application/json header above."
     },
     {
       "parameters": {
@@ -227,7 +227,7 @@
           "name": "Antrhopic API Key"
         }
       },
-      "notes": "Structured-JSON-only extraction per CLAUDE.md's 'never free text' rule. Same shape ME101 uses for its equivalent agent (~38.5% early failure rate there per the Master Work Log) \u2014 validation happens in the next node, not here. Reads $json.data generically since either upstream branch (known-URL fetch or search fallback) can feed this node."
+      "notes": "Structured-JSON-only extraction per CLAUDE.md's 'never free text' rule. Same shape ME101 uses for its equivalent agent (~38.5% early failure rate there per the Master Work Log) \u2014 validation happens in the next node, not here. Reads $json.data generically since either upstream branch (known-URL fetch or search fallback) can feed this node. Confirmed live 2026-07-31: Anthropic's Messages API 400s without an anthropic-version header, which isn't part of the API-key credential itself \u2014 hence the explicit header above."
     },
     {
       "parameters": {

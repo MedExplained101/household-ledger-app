@@ -1,10 +1,10 @@
 {
-  "name": "Household Ledger - Recommendation Agent (SCAFFOLD, not deployed)",
+  "name": "Household Ledger - Recommendation Agent",
   "nodes": [
     {
       "parameters": {
-        "content": "## SCAFFOLD \u2014 NOT DEPLOYED\nImplements household-ledger-architecture.md \u00a77 (bulk-trip economics) \u2014 the 4th of the 5 planned agents. Unlike the other three scaffolds, no schema extension is needed: `Stores` and `Inventory.cycle_count` are already in household-ledger-sheets-schema.md.\n\nWHY THIS CAN'T PRODUCE REAL OUTPUT YET, EVEN ONCE DEPLOYED: it needs real `Stores.distance_from_home_mi`/`est_trip_cost` data (Open Decision #5 \u2014 manual entry to start, per the doc's own recommendation) and real `Inventory.avg_days_to_finish`/`cycle_count` history, which only accumulates once the Check-In Agent has actually been running for multiple purchase cycles. That's expected \u2014 this is the same 'drafted before its dependencies exist' situation as the other three scaffolds.\n\nV1 SIMPLIFICATION, FLAGGED HONESTLY: architecture.md says trip cost should be 'amortized if the bulk buy covers several months of supply' \u2014 true multi-item trip-bundling (combining several items' savings to justify one trip) is a harder optimization problem than this scaffold solves. V1 rule: recommend only if a SINGLE item's own annual savings already exceeds one round trip's cost on its own \u2014 conservative (will under-recommend relative to true trip-bundling economics), but won't give a false-positive recommendation.\n\nSETUP TODOs: replace `documentId`/credential placeholders; connect Telegram (Open Decision #3, same question as the other Telegram-using scaffolds). The 'show as a badge in the app next to that item' idea in architecture.md \u00a77 step 4 is a src/App.jsx frontend change \u2014 not touched here, flagged as a separate follow-on task.",
-        "height": 560,
+        "content": "## DEPLOYED — live in n8n since 2026-07-31\nImplements household-ledger-architecture.md §7 (bulk-trip economics) — the 4th of the 5 planned agents. No schema extension needed: `Stores` and `Inventory.cycle_count` are already in household-ledger-sheets-schema.md.\n\nSTATUS: real `documentId`, chat ID, Google Sheets credential, and Telegram bot credential all wired; workflow published. Auto-geocoding chain added 2026-08-01 (see the 'Geocode Store Distance' branch below). Multi-item trip amortization added 2026-08-01, replacing the old single-item-only V1 rule (see below).\n\nWHY THIS CAN'T PRODUCE REAL OUTPUT YET, EVEN THOUGH DEPLOYED: it needs `Settings.home_address` filled in by hand (blank by default, personal information, never committed), a Google Maps Platform API key wired in as an `httpQueryAuth` credential (`REPLACE_WITH_GOOGLE_MAPS_CREDENTIAL_ID`), and real `Inventory.avg_days_to_finish`/`cycle_count` history, which only accumulates once the Check-In Agent has actually been running for multiple purchase cycles. That's expected — dependencies just haven't accumulated yet.\n\nAMORTIZED TRIP ECONOMICS (2026-08-01, resolves the earlier V1 gap): architecture.md says trip cost should be 'amortized if the bulk buy covers several months of supply' — 'Compute Recommendations' now groups every cheaper-at-a-bulk-store item candidate by that store, and recommends the trip if the items' COMBINED annual savings clears the trip cost, not just any one item alone. A single big saving still qualifies on its own (it's a subset of the group total), so nothing regresses — it just stops missing the case where three modest savings add up to justify one drive. 'Format Recommendations Message' groups the Telegram output by trip accordingly, listing every item riding along with its own savings and reliability caveat.\n\nThe 'show as a badge in the app next to that item' idea in architecture.md §7 step 4 is a src/App.jsx frontend change — not touched here, flagged as a separate follow-on task.",
+        "height": 620,
         "width": 480
       },
       "id": "note-1",
@@ -37,7 +37,241 @@
         -1400,
         0
       ],
-      "notes": "Weekly, per architecture.md \u00a77 ('weekly or monthly is plenty, this doesn't need daily'). Change daysInterval to 30 for monthly if preferred."
+      "notes": "Weekly, per architecture.md §7 ('weekly or monthly is plenty, this doesn't need daily'). Change daysInterval to 30 for monthly if preferred."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Settings",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-settings-geocode",
+      "name": "Get Settings for Home Address",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1400,
+        180
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "First step of the auto-geocoding chain (Open Decision #5, resolved 2026-08-01). Chained sequentially rather than run in parallel-then-merge, applying the exact lesson from today's Merge List + Settings bug in the List/Budget Webhook Agent: a named-node reference ($('Get Settings for Home Address')) is only safe once this node has actually finished, and a straight chain guarantees that without needing a Merge node at all."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-stores-geocode",
+      "name": "Get Stores for Geocoding",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1180,
+        180
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "Separate read from the 'Get Stores' node further down (which the recommendation math uses) — this one runs first and drives the geocoding pass so that later read picks up freshly-updated distances in the same execution."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.distance_from_home_mi }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty"
+              }
+            },
+            {
+              "leftValue": "={{ $('Get Settings for Home Address').first().json.home_address }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-missing-distance",
+      "name": "Missing Distance?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -960,
+        180
+      ],
+      "notes": "Only geocodes rows that don't already have a distance AND only if Settings.home_address has actually been filled in (it's blank by default — a real address is personal information and deliberately never committed to this repo, see household-ledger-sheets-schema.md). No home address set = this whole branch is a no-op and Stores stays exactly as manually entered, same behavior as before this feature existed."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://maps.googleapis.com/maps/api/distancematrix/json?origins={{ encodeURIComponent($('Get Settings for Home Address').first().json.home_address) }}&destinations={{ encodeURIComponent($json.address) }}&units=imperial",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-geocode-distance",
+      "name": "Geocode Store Distance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -740,
+        100
+      ],
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "REPLACE_WITH_GOOGLE_MAPS_CREDENTIAL_ID",
+          "name": "Google Maps Distance Matrix API Key (Household Ledger)"
+        }
+      },
+      "notes": "httpQueryAuth credential should hold the query param name 'key' and your Google Maps Platform API key as its value (Distance Matrix API takes the key as a URL param, not a header). Explicit Accept header added preemptively — applying the same fix Brave Search needed in the Price Refresh Agent (n8n's default multi-type Accept header 422s some APIs) rather than waiting to hit it live here too. Requires the Distance Matrix API enabled on that Google Cloud project; billing must be active (Google requires it even within the free monthly credit)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Origin item is the Stores row that triggered this branch (Get Stores for Geocoding),\n// looked up by pairedItem rather than $json since $json here is the HTTP response body.\nconst store = $('Get Stores for Geocoding').item.json.store;\nconst resp = $json;\nconst element = resp?.rows?.[0]?.elements?.[0];\n\nif (!element || element.status !== 'OK') {\n  return [{ json: { store, ok: false, reason: element?.status || 'no_response' } }];\n}\n\nconst miles = Math.round((element.distance.value / 1609.34) * 10) / 10;\n\n// Round-trip cost estimate using a standard per-mile rate as a stand-in for real\n// gas/wear-and-tear cost — a rough default, not a precise trip-cost model. Overwrite\n// est_trip_cost by hand directly in the Stores sheet later if a better number is known;\n// this only fills the cell, it never overwrites a value someone already entered manually\n// (see the Missing Distance? filter upstream).\nconst MILEAGE_RATE_PER_MI = 0.67;\nconst estTripCost = Math.round(miles * 2 * MILEAGE_RATE_PER_MI * 100) / 100;\n\nreturn [{ json: { store, ok: true, distance_from_home_mi: miles, est_trip_cost: estTripCost } }];"
+      },
+      "id": "code-parse-distance",
+      "name": "Parse Distance + Est Trip Cost",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-geocode-succeeded",
+      "name": "Geocode Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -300,
+        100
+      ],
+      "notes": "A non-OK Distance Matrix status (e.g. NOT_FOUND for a bad address, ZERO_RESULTS) skips the sheet write rather than clobbering the row with blanks — that store's distance just stays empty for this run, same as if geocoding hadn't run at all."
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "store": "={{ $json.store }}",
+            "distance_from_home_mi": "={{ $json.distance_from_home_mi }}",
+            "est_trip_cost": "={{ $json.est_trip_cost }}"
+          },
+          "matchingColumns": [
+            "store"
+          ]
+        },
+        "options": {}
+      },
+      "id": "sheets-update-store-distance",
+      "name": "Update Store Distance",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -80,
+        100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "noop-geocoding-done",
+      "name": "Geocoding Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        140,
+        180
+      ],
+      "notes": "Barrier node: every Stores row has either been geocoded+updated, already had a distance, or was skipped (no home address / geocode failure) by the time execution reaches here — only then do the three reads below (which the recommendation math depends on) fire, so they always see this run's fresh distances instead of racing the geocoding pass."
     },
     {
       "parameters": {
@@ -69,7 +303,8 @@
           "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "executeOnce": true
     },
     {
       "parameters": {
@@ -101,7 +336,8 @@
           "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "executeOnce": true
     },
     {
       "parameters": {
@@ -133,27 +369,14 @@
           "id": "REPLACE_WITH_SHEET_CREDENTIAL_ID",
           "name": "Google Sheets account"
         }
-      }
-    },
-    {
-      "parameters": {
-        "mode": "combine",
-        "combineBy": "combineAll",
-        "options": {}
       },
-      "id": "merge-sources",
-      "name": "Merge Catalog + Stores + Inventory",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
-      "position": [
-        -960,
-        60
-      ],
-      "notes": "Same join pattern as the existing Webhook Agent's 'Merge List + Settings' node."
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "notes": "alwaysOutputData is required here, not optional: Inventory is genuinely empty until the Check-In Agent has completed real purchase cycles, and n8n halts the whole workflow on a node that produces zero output items. Compute Recommendations already handles an empty inventoryRows gracefully — this just lets it get there."
     },
     {
       "parameters": {
-        "jsCode": "// Bulk-trip economics per architecture.md \u00a77, with the confidence gate from the same section:\n// 8 completed cycles before a recommendation is 'reliable' rather than 'provisional'.\nconst RELIABLE_CYCLE_THRESHOLD = 8;\n\n// $input.all() holds three parallel branches merged combineAll: Catalog rows, then Stores\n// rows, then Inventory rows, in that order (mirrors how the existing Webhook Agent reads\n// its two merged branches via named-node lookups rather than trusting input order).\nconst catalogRows = $('Get Catalog').all().map(i => i.json);\nconst storeRows = $('Get Stores').all().map(i => i.json);\nconst inventoryRows = $('Get Inventory').all().map(i => i.json);\n\nconst storeByName = new Map(storeRows.map(s => [s.store, s]));\nconst inventoryByItem = new Map(inventoryRows.map(r => [r.item, r]));\n\nconst unitPriceOf = (row) => {\n  const up = Number(row.unit_price);\n  if (up > 0) return up;\n  const p = Number(row.price);\n  return p > 0 ? p : null; // falls back to raw price if no unit_price, same convention as the app's priceOf()\n};\n\n// Group Catalog rows by item\nconst byItem = new Map();\nfor (const row of catalogRows) {\n  if (!byItem.has(row.item)) byItem.set(row.item, []);\n  byItem.get(row.item).push(row);\n}\n\nconst recommendations = [];\n\nfor (const [item, rows] of byItem.entries()) {\n  if (rows.length < 2) continue; // needs at least two stores to compare\n  const inv = inventoryByItem.get(item);\n  const avgDaysToFinish = inv ? Number(inv.avg_days_to_finish) : null;\n  if (!avgDaysToFinish || avgDaysToFinish <= 0) continue; // no consumption-rate data yet\n  const cycleCount = inv ? (Number(inv.cycle_count) || 0) : 0;\n  const annualQty = 365 / avgDaysToFinish;\n\n  const withStoreInfo = rows\n    .map(r => ({ ...r, _unitPrice: unitPriceOf(r), _store: storeByName.get(r.store) }))\n    .filter(r => r._unitPrice != null && r._store && Number(r._store.distance_from_home_mi) >= 0);\n  if (withStoreInfo.length < 2) continue;\n\n  withStoreInfo.sort((a, b) => Number(a._store.distance_from_home_mi) - Number(b._store.distance_from_home_mi));\n  const near = withStoreInfo[0];\n\n  for (const bulk of withStoreInfo.slice(1)) {\n    if (bulk._unitPrice >= near._unitPrice) continue; // not actually cheaper \u2014 no recommendation\n    const annualSavings = (near._unitPrice - bulk._unitPrice) * annualQty;\n    const tripCost = Number(bulk._store.est_trip_cost) || 0;\n    // V1 simplification (see Setup Notes): single-item annual savings must clear one trip's\n    // cost on its own \u2014 conservative, doesn't credit trip-bundling across multiple items.\n    if (annualSavings <= tripCost) continue;\n\n    recommendations.push({\n      item,\n      nearStore: near.store,\n      bulkStore: bulk.store,\n      annualSavings: Math.round(annualSavings * 100) / 100,\n      tripCost,\n      cycleCount,\n      reliable: cycleCount >= RELIABLE_CYCLE_THRESHOLD,\n    });\n  }\n}\n\nreturn recommendations.map(r => ({ json: r }));"
+        "jsCode": "// Bulk-trip economics per architecture.md §7, with the confidence gate from the same section:\n// 8 completed cycles before an item's own contribution is 'reliable' rather than 'provisional'.\n//\n// AMORTIZED ACROSS ITEMS (2026-08-01, replaces the old single-item-only V1 rule): a trip to a\n// farther 'bulk' store is justified if the SUM of every item's annual savings on that trip\n// clears the trip's own est_trip_cost — not just any one item alone. This still catches the old\n// single-item case for free (one big saving already clears the group total on its own), it just\n// stops missing the case where three modest per-item savings add up to justify the same drive.\nconst RELIABLE_CYCLE_THRESHOLD = 8;\n\nconst catalogRows = $('Get Catalog').all().map(i => i.json);\nconst storeRows = $('Get Stores').all().map(i => i.json);\nconst inventoryRows = $('Get Inventory').all().map(i => i.json);\n\nconst storeByName = new Map(storeRows.map(s => [s.store, s]));\nconst inventoryByItem = new Map(inventoryRows.map(r => [r.item, r]));\n\nconst unitPriceOf = (row) => {\n  const up = Number(row.unit_price);\n  if (up > 0) return up;\n  const p = Number(row.price);\n  return p > 0 ? p : null; // falls back to raw price if no unit_price, same convention as the app's priceOf()\n};\n\n// Group Catalog rows by item\nconst byItem = new Map();\nfor (const row of catalogRows) {\n  if (!byItem.has(row.item)) byItem.set(row.item, []);\n  byItem.get(row.item).push(row);\n}\n\n// Step 1: collect every candidate (item, nearStore, bulkStore) pair where the bulk store is\n// genuinely cheaper per unit, regardless of whether it clears the trip cost alone — grouped by\n// bulk store so the trip cost can be amortized across every item that would ride along.\nconst candidatesByBulkStore = new Map();\n\nfor (const [item, rows] of byItem.entries()) {\n  if (rows.length < 2) continue; // needs at least two stores to compare\n  const inv = inventoryByItem.get(item);\n  const avgDaysToFinish = inv ? Number(inv.avg_days_to_finish) : null;\n  if (!avgDaysToFinish || avgDaysToFinish <= 0) continue; // no consumption-rate data yet\n  const cycleCount = inv ? (Number(inv.cycle_count) || 0) : 0;\n  const annualQty = 365 / avgDaysToFinish;\n\n  const withStoreInfo = rows\n    .map(r => ({ ...r, _unitPrice: unitPriceOf(r), _store: storeByName.get(r.store) }))\n    .filter(r => r._unitPrice != null && r._store && Number(r._store.distance_from_home_mi) >= 0);\n  if (withStoreInfo.length < 2) continue;\n\n  withStoreInfo.sort((a, b) => Number(a._store.distance_from_home_mi) - Number(b._store.distance_from_home_mi));\n  const near = withStoreInfo[0];\n\n  for (const bulk of withStoreInfo.slice(1)) {\n    if (bulk._unitPrice >= near._unitPrice) continue; // not actually cheaper — no candidate\n    const annualSavings = (near._unitPrice - bulk._unitPrice) * annualQty;\n    if (annualSavings <= 0) continue;\n\n    const candidate = {\n      item,\n      nearStore: near.store,\n      annualSavings: Math.round(annualSavings * 100) / 100,\n      cycleCount,\n      reliable: cycleCount >= RELIABLE_CYCLE_THRESHOLD,\n    };\n    if (!candidatesByBulkStore.has(bulk.store)) candidatesByBulkStore.set(bulk.store, []);\n    candidatesByBulkStore.get(bulk.store).push(candidate);\n  }\n}\n\n// Step 2: a bulk store only becomes a recommendation if its candidate items' combined annual\n// savings clears that store's own trip cost — amortized across everything worth buying there.\nconst recommendations = [];\nfor (const [bulkStore, items] of candidatesByBulkStore.entries()) {\n  const store = storeByName.get(bulkStore);\n  const tripCost = Number(store?.est_trip_cost) || 0;\n  const totalAnnualSavings = items.reduce((sum, i) => sum + i.annualSavings, 0);\n  if (totalAnnualSavings <= tripCost) continue; // doesn't pay for the trip even combined\n\n  recommendations.push({\n    bulkStore,\n    tripCost,\n    totalAnnualSavings: Math.round(totalAnnualSavings * 100) / 100,\n    allReliable: items.every(i => i.reliable),\n    items,\n  });\n}\n\nreturn recommendations.map(r => ({ json: r }));"
       },
       "id": "code-compute-recommendations",
       "name": "Compute Recommendations",
@@ -162,11 +385,13 @@
       "position": [
         -740,
         60
-      ]
+      ],
+      "alwaysOutputData": true,
+      "notes": "alwaysOutputData required: while Inventory has no real cycle history, this legitimately returns zero recommendations, and n8n halts a branch the moment a node outputs zero items — Check For Recommendations' own zero-handling code never even fires without this, despite being written specifically for that case."
     },
     {
       "parameters": {
-        "jsCode": "// Guarantees exactly one output item regardless of how many recommendations came out of\n// the previous node (including zero) \u2014 an If/Switch node given zero input items fires on\n// NEITHER branch in n8n, which would silently swallow the 'nothing to recommend' case if\n// this check node weren't here. A Code node in 'Run Once for All Items' mode always runs.\nconst items = $input.all().map(i => i.json);\nreturn [{ json: { hasRecommendations: items.length > 0, items } }];"
+        "jsCode": "// Guarantees exactly one output item regardless of how many recommendations came out of\n// the previous node (including zero) — an If/Switch node given zero input items fires on\n// NEITHER branch in n8n, which would silently swallow the 'nothing to recommend' case if\n// this check node weren't here. CORRECTION (2026-08-01, found live): a Code node in 'Run\n// Once for All Items' mode does NOT run on zero input unless the upstream node that fed it\n// has alwaysOutputData set — otherwise n8n halts the branch before this node ever fires.\n// Compute Recommendations has alwaysOutputData: true for exactly this reason — but that\n// setting has its own side effect: when Compute Recommendations' real output is empty,\n// n8n substitutes a single placeholder item ({}) instead of truly zero items, so this node\n// never sees zero input either. Filter that placeholder out explicitly (a real recommendation\n// object always has a bulkStore field; the placeholder has no keys at all) rather than just\n// counting raw item length, or 'nothing to recommend' would be misread as 'found one'.\nconst items = $input.all().map(i => i.json).filter(r => r && r.bulkStore);\nreturn [{ json: { hasRecommendations: items.length > 0, items } }];"
       },
       "id": "code-check-any",
       "name": "Check For Recommendations",
@@ -208,7 +433,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Same caution-icon convention already used in the app for missing pack sizes\n// (household-ledger-architecture.md \u00a77's 'Confidence gate' section), applied here to\n// data maturity instead: below-threshold recommendations get a \u26a0\ufe0f provisional caveat,\n// at-threshold-or-above ones are stated plainly.\nconst RELIABLE_CYCLE_THRESHOLD = 8;\nconst lines = $json.items.map(r => {\n  const caveat = r.reliable\n    ? ''\n    : ` (\\u26A0\\uFE0F provisional \\u2014 based on ${r.cycleCount} of ${RELIABLE_CYCLE_THRESHOLD} purchase cycles)`;\n  return `${r.item}: ${r.nearStore} \\u2192 ${r.bulkStore} could save ~$${r.annualSavings.toFixed(2)}/yr `\n    + `(trip cost $${r.tripCost.toFixed(2)})${caveat}`;\n});\nconst text = `\\uD83D\\uDCE6 Bulk-trip recommendations this week:\\n\\n${lines.join('\\n')}`;\nreturn [{ json: { text } }];"
+        "jsCode": "// Same caution-icon convention already used in the app for missing pack sizes\n// (household-ledger-architecture.md §7's 'Confidence gate' section), applied here to\n// data maturity instead: below-threshold items get a ⚠️ provisional caveat, at-threshold-\n// or-above ones are stated plainly. Each block is now one bulk-store TRIP (items amortized\n// together, see Compute Recommendations), not one item — a trip can carry several items.\nconst RELIABLE_CYCLE_THRESHOLD = 8;\nconst blocks = $json.items.map(rec => {\n  const itemLines = rec.items.map(i => {\n    const caveat = i.reliable\n      ? ''\n      : ` (\\u26A0\\uFE0F provisional \\u2014 ${i.cycleCount}/${RELIABLE_CYCLE_THRESHOLD} cycles)`;\n    return `  \\u2022 ${i.item} (vs ${i.nearStore}): ~$${i.annualSavings.toFixed(2)}/yr${caveat}`;\n  });\n  const header = `${rec.bulkStore} \\u2014 combined ~$${rec.totalAnnualSavings.toFixed(2)}/yr saved `\n    + `(trip cost $${rec.tripCost.toFixed(2)})`\n    + (rec.allReliable ? '' : ' \\u26A0\\uFE0F some items still provisional');\n  return [header, ...itemLines].join('\\n');\n});\nconst text = `\\uD83D\\uDCE6 Bulk-trip recommendations this week:\\n\\n${blocks.join('\\n\\n')}`;\nreturn [{ json: { text } }];"
       },
       "id": "code-format-message",
       "name": "Format Recommendations Message",
@@ -257,17 +482,109 @@
       "main": [
         [
           {
+            "node": "Get Settings for Home Address",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Settings for Home Address": {
+      "main": [
+        [
+          {
+            "node": "Get Stores for Geocoding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stores for Geocoding": {
+      "main": [
+        [
+          {
+            "node": "Missing Distance?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Missing Distance?": {
+      "main": [
+        [
+          {
+            "node": "Geocode Store Distance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Geocoding Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode Store Distance": {
+      "main": [
+        [
+          {
+            "node": "Parse Distance + Est Trip Cost",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Distance + Est Trip Cost": {
+      "main": [
+        [
+          {
+            "node": "Geocode Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Update Store Distance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Geocoding Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Store Distance": {
+      "main": [
+        [
+          {
+            "node": "Geocoding Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocoding Done": {
+      "main": [
+        [
+          {
             "node": "Get Catalog",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Get Stores",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Get Inventory",
             "type": "main",
             "index": 0
           }
@@ -278,7 +595,7 @@
       "main": [
         [
           {
-            "node": "Merge Catalog + Stores + Inventory",
+            "node": "Get Stores",
             "type": "main",
             "index": 0
           }
@@ -289,25 +606,14 @@
       "main": [
         [
           {
-            "node": "Merge Catalog + Stores + Inventory",
+            "node": "Get Inventory",
             "type": "main",
-            "index": 1
+            "index": 0
           }
         ]
       ]
     },
     "Get Inventory": {
-      "main": [
-        [
-          {
-            "node": "Merge Catalog + Stores + Inventory",
-            "type": "main",
-            "index": 2
-          }
-        ]
-      ]
-    },
-    "Merge Catalog + Stores + Inventory": {
       "main": [
         [
           {
