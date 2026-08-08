@@ -240,7 +240,7 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $json.item }}",
+              "leftValue": "={{ $json.item || \"\" }}",
               "rightValue": "",
               "operator": {
                 "type": "string",
@@ -258,7 +258,7 @@
         270,
         -300
       ],
-      "notes": "Guards against writing a blank Inventory row from the alwaysOutputData {} placeholder when a reply had no low/finished items (e.g. a 'NONE' reply) -- found live 2026-08-08 alongside the same-class Resolve Auto-Add Rows gap."
+      "notes": "Guards against writing a blank Inventory row from the alwaysOutputData {} placeholder when a reply had no low/finished items (e.g. a 'NONE' reply) -- found live 2026-08-08 alongside the same-class Resolve Auto-Add Rows gap. Left value uses `|| \"\"` because a bare `{{ $json.item }}` evaluates to JS undefined on the placeholder, and `undefined !== \"\"` is true -- the original condition let the placeholder through instead of blocking it. Found live 2026-08-08 when Update Inventory Rows still received the {} placeholder despite this gate."
     },
     {
       "parameters": {
@@ -361,7 +361,7 @@
           },
           "conditions": [
             {
-              "leftValue": "={{ $json.item }}",
+              "leftValue": "={{ $json.item || \"\" }}",
               "rightValue": "",
               "operator": {
                 "type": "string",
@@ -379,7 +379,7 @@
         490,
         20
       ],
-      "notes": "Guards against writing a blank ShoppingList row from the alwaysOutputData {} placeholder when nothing in the reply matched a real Catalog item -- found live 2026-08-08."
+      "notes": "Guards against writing a blank ShoppingList row from the alwaysOutputData {} placeholder when nothing in the reply matched a real Catalog item -- found live 2026-08-08. Left value uses `|| \"\"` for the same reason as Has Inventory Updates? -- a bare `{{ $json.item }}` is JS undefined on the placeholder, and `undefined !== \"\"` is true, so the original condition let it through."
     },
     {
       "parameters": {
