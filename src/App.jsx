@@ -277,7 +277,7 @@ export default function HouseholdLedger() {
   const recurring = CATALOG.filter((i) => /recurring/.test(i.note || ""));
 
   return (
-    <div className="min-h-screen bg-[#0F1E3D] text-[#F2F0E6] font-serif">
+    <div className="min-h-screen overflow-x-hidden bg-[#0F1E3D] text-[#F2F0E6] font-serif">
       <style>{`
         .font-serif { font-family: Georgia, 'Times New Roman', serif; }
         .font-mono-tab { font-family: 'Courier New', Courier, monospace; }
@@ -468,7 +468,8 @@ export default function HouseholdLedger() {
             </div>
           ) : (
             <div className="border border-[#F2F0E6] bg-[#16264A]">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[560px]">
                 <thead>
                   <tr className="border-b border-[#F2F0E6] text-left text-xs uppercase tracking-widest text-[#93A3C4]">
                     <th className="py-2 px-3 font-normal">Item</th>
@@ -557,6 +558,7 @@ export default function HouseholdLedger() {
                   })}
                 </tbody>
               </table>
+              </div>
 
               <div className="dashed-top" />
 
