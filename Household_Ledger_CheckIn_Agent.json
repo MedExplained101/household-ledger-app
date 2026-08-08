@@ -429,13 +429,13 @@
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "item": "={{ $json.item }}",
-            "category": "={{ $json.category }}",
-            "store": "={{ $json.store }}",
-            "price": "={{ $json.price }}",
-            "qty": "={{ $json.qty }}",
+            "item": "={{ $('Resolve Auto-Add Rows').first().json.item }}",
+            "category": "={{ $('Resolve Auto-Add Rows').first().json.category }}",
+            "store": "={{ $('Resolve Auto-Add Rows').first().json.store }}",
+            "price": "={{ $('Resolve Auto-Add Rows').first().json.price }}",
+            "qty": "={{ $('Resolve Auto-Add Rows').first().json.qty }}",
             "cadence": "={{ $('Get Settings (for cadence)').first().json.cadence }}",
-            "added_date": "={{ $today.format('yyyy-MM-dd') }}"
+            "added_date": "={{ $today.toFormat('yyyy-MM-dd') }}"
           },
           "matchingColumns": [
             "item"
@@ -443,6 +443,7 @@
         },
         "options": {}
       },
+      "notes": "item/category/store/price/qty must reference $('Resolve Auto-Add Rows') by name, not bare $json -- Get Settings (for cadence) sits directly upstream of this node and replaces $json with the Settings row, so a bare $json.item etc. was always undefined. Original design bug, present since this node was first built, not a live drift -- only cadence was ever correct, since it already used a named reference. Found live 2026-08-08 when live testing showed budget/CheckIn_Status/CheckIn_ResumeURL/home_address (Settings row fields) had been added as extra live-only field mappings and were leaking into ShoppingList as real columns; those extra fields don't exist in this checked-in version and must be removed live to match. Also fixed added_date: $today is a Luxon DateTime, whose format method is .toFormat(), not .format() -- the old expression silently evaluated to undefined.",
       "id": "sheets-upsert-shoppinglist",
       "name": "Auto-Add to ShoppingList",
       "type": "n8n-nodes-base.googleSheets",
