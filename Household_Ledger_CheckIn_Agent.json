@@ -155,6 +155,7 @@
     {
       "parameters": {
         "resume": "webhook",
+        "httpMethod": "POST",
         "limitWaitTime": true,
         "limitType": "afterTimeInterval",
         "resumeAmount": 48,
@@ -168,7 +169,7 @@
         -500,
         -120
       ],
-      "notes": "Resumes when Household_Ledger_CheckIn_Reply_Listener.json calls this execution's resume URL. Times out after 48h if no reply \u2014 falls through with no lowItems/finishedItems, handled gracefully by the next Code node."
+      "notes": "Resumes when Household_Ledger_CheckIn_Reply_Listener.json calls this execution's resume URL. Times out after 48h if no reply \u2014 falls through with no lowItems/finishedItems, handled gracefully by the next Code node. httpMethod must be POST to match Call Resume Webhook's POST call (it needs a body for lowItems/finishedItems) \u2014 left unset originally, which silently defaulted to GET and caused every resume attempt to 404 with 'no waiting webhook with a matching path/method' (found live 2026-08-08)."
     },
     {
       "parameters": {
