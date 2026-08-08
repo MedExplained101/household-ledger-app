@@ -122,6 +122,7 @@ export default function HouseholdLedger() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState(null);
+  const [finalized, setFinalized] = useState(false);
 
   // Maps a ShoppingList row from the sheet back into the shape the UI expects,
   // reattaching the matching CATALOG entry so stores/notes/sizeUnknown still work.
@@ -258,6 +259,39 @@ export default function HouseholdLedger() {
       applyServerState(data);
     } catch {
       setError("Couldn't remove that item — try again.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function clearAll() {
+    if (list.length === 0) return;
+    if (!window.confirm(`Clear all ${list.length} item${list.length === 1 ? "" : "s"} from this ${cadence.toLowerCase()}'s list? This can't be undone.`)) {
+      return;
+    }
+    setSyncing(true);
+    setError(null);
+    try {
+      const data = await callWebhook({ action: "clear" });
+      applyServerState(data);
+    } catch {
+      setError("Couldn't clear the list — try again.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function finalizeList() {
+    if (list.length === 0) return;
+    setSyncing(true);
+    setError(null);
+    try {
+      const data = await callWebhook({ action: "finalize" });
+      applyServerState(data);
+      setFinalized(true);
+      setTimeout(() => setFinalized(false), 4000);
+    } catch {
+      setError("Couldn't send the finalized list — try again.");
     } finally {
       setSyncing(false);
     }
@@ -659,6 +693,25 @@ export default function HouseholdLedger() {
                   <span>{over ? "Over budget" : "Remaining"}</span>
                   <span>${Math.abs(remaining).toFixed(2)}</span>
                 </div>
+              </div>
+
+              <div className="dashed-top" />
+
+              <div className="px-3 py-3 flex items-center justify-between gap-3">
+                <button
+                  onClick={clearAll}
+                  disabled={syncing}
+                  className="text-xs uppercase tracking-widest text-[#93A3C4] hover:text-[#E8756A] disabled:opacity-50"
+                >
+                  Clear all
+                </button>
+                <button
+                  onClick={finalizeList}
+                  disabled={syncing}
+                  className="px-4 py-1.5 text-xs uppercase tracking-widest bg-[#3B6142] text-[#F2F0E6] rounded-sm hover:bg-[#2E4D34] disabled:opacity-50"
+                >
+                  {finalized ? "Sent ✓" : "Save list"}
+                </button>
               </div>
             </div>
           )}

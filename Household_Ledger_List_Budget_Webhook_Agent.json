@@ -9,7 +9,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## SETUP TODOs\n1. Replace `documentId` on every Google Sheets node below with your Household Ledger spreadsheet ID (see household-ledger-sheets-schema.md)\n2. Connect your Google Sheets credential (reused the same credential ID as your BNS workflows below \u2014 adjust if this is a different Google account)\n3. Activate this workflow, then grab the Production webhook URL from the Webhook node \u2014 that's what the mobile app POSTs to\n\nExpected POST body:\n`{ \"action\": \"get\" }`\n`{ \"action\": \"upsert\", \"item\": \"Basmati Rice\", \"category\": \"Pantry\", \"store\": \"Walmart\", \"price\": 9.52, \"qty\": 1, \"cadence\": \"Week\" }`\n`{ \"action\": \"remove\", \"item\": \"Basmati Rice\" }`\n\nResponse: `{ \"list\": [...rows], \"total\": 42.10, \"budget\": 200, \"remaining\": 157.90 }`",
+        "content": "## SETUP TODOs\n1. Replace `documentId` on every Google Sheets node below with your Household Ledger spreadsheet ID (see household-ledger-sheets-schema.md)\n2. Connect your Google Sheets credential (reused the same credential ID as your BNS workflows below \u2014 adjust if this is a different Google account)\n3. Activate this workflow, then grab the Production webhook URL from the Webhook node \u2014 that's what the mobile app POSTs to\n\nExpected POST body:\n`{ \"action\": \"get\" }`\n`{ \"action\": \"upsert\", \"item\": \"Basmati Rice\", \"category\": \"Pantry\", \"store\": \"Walmart\", \"price\": 9.52, \"qty\": 1, \"cadence\": \"Week\" }`\n`{ \"action\": \"remove\", \"item\": \"Basmati Rice\" }`\n`{ \"action\": \"clear\" }` \u2014 added 2026-08-08, empties every ShoppingList row (keeps the header)\n`{ \"action\": \"finalize\" }` \u2014 added 2026-08-08, doesn't change the list; sends a Telegram summary of the current list + total, same response shape as `get`\n\nResponse: `{ \"list\": [...rows], \"total\": 42.10, \"budget\": 200, \"remaining\": 157.90 }`\n\nSETUP TODO for `finalize`: `Send Finalize Summary`'s Telegram credential still shows a placeholder \u2014 wire it to the same bot already connected for Budget Alert Listener/Check-In Agent. Also verify `Clear ShoppingList Rows`' \"Number of Rows to Delete\" field live (written as `rowsToDelete` here by analogy, not confirmed against the real node schema).",
         "height": 460,
         "width": 380
       },
@@ -111,6 +111,52 @@
               },
               "renameOutput": true,
               "outputKey": "Get"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "clear",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Clear"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "finalize",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Finalize"
             }
           ]
         },
@@ -447,6 +493,189 @@
       ],
       "id": "fa587eb5-1392-401d-a9b6-afcf4d5ddc47",
       "name": "Return List + Totals"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "ShoppingList",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        720,
+        680
+      ],
+      "id": "sheets-get-rows-to-clear",
+      "name": "Get All ShoppingList Rows",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "Reads current row count before clearing -- needed to know how many rows to delete, since we're deliberately avoiding the Google Sheets node's separate 'Clear' operation (its exact parameter shape wasn't verified live, unlike Delete Rows or Columns, which was already fixed and confirmed working tonight for the Remove action). Added 2026-08-08 for the Clear All feature."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Counts current ShoppingList data rows before clearing. Feeds Has Rows to Clear?\n// and the fixed Start Row Number (always 2, the first data row -- see the note on\n// Clear ShoppingList Rows for why this is a real number, not row_number - 1).\nreturn [{ json: { count: $input.all().length } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        680
+      ],
+      "id": "code-count-rows-to-clear",
+      "name": "Count Rows to Clear"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-has-rows-to-clear",
+      "name": "Has Rows to Clear?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1080,
+        680
+      ],
+      "notes": "Guards against calling Delete Rows or Columns with 0 rows to delete when the list is already empty -- same alwaysOutputData-adjacent defensive pattern used throughout tonight's Check-In Agent fixes, applied proactively here since this is new code. False branch skips straight to Get Current List/Get Settings."
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "ShoppingList",
+          "mode": "name"
+        },
+        "startIndex": 2,
+        "rowsToDelete": "={{ $json.count }}"
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1080,
+        800
+      ],
+      "id": "sheets-clear-shoppinglist-rows",
+      "name": "Clear ShoppingList Rows",
+      "notes": "SETUP TODO: verify the 'Number of Rows to Delete' field's actual parameter key live in n8n -- written here as rowsToDelete by analogy, not confirmed against the real node schema the way startIndex was tonight. If it doesn't load correctly, open this node in the UI, re-enter Start Row Number as a fixed 2 (confirmed correct 2026-08-08: 1-indexed directly against the real sheet row, row 1 = header) and set Number of Rows to Delete to the expression {{ $json.count }} from whatever that field is actually labeled in your n8n version.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('List Webhook').first().json.body.action }}",
+              "rightValue": "finalize",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-is-finalize",
+      "name": "Is Finalize?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1824,
+        650
+      ],
+      "notes": "Runs in parallel off Compute Totals, alongside the existing (unconditional) connection to Return List + Totals and alongside Check Budget Alert (live-only, not in this checked-in file -- see TODO.md). Uses a named reference all the way back to List Webhook, not bare $json, specifically to avoid the exact wrong-payload-level bug class found and fixed in the Check-In Agent's Read Parsed Reply/Auto-Add to ShoppingList tonight -- Compute Totals' own $json is {list,total,budget,remaining,cadence}, which has no action field of its own. Added 2026-08-08 for the Save List (finalize) feature."
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1824,
+        520
+      ],
+      "id": "noop-not-finalize",
+      "name": "Not Finalize - No Summary"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds the Telegram summary text for a finalized (Save List) request.\n// Input is Compute Totals' own output: { list, total, budget, remaining, cadence }.\nconst { list, total, budget, remaining, cadence } = $json;\nconst lines = list\n  .map((r) => `\\u2022 ${r.item} (x${r.qty}) \\u2014 $${(Number(r.price) * Number(r.qty)).toFixed(2)}`)\n  .join('\\n');\nconst budgetLine = remaining >= 0\n  ? `$${remaining.toFixed(2)} remaining`\n  : `$${Math.abs(remaining).toFixed(2)} over`;\nconst text = `\\uD83D\\uDED2 Household Ledger \\u2014 ${cadence} list finalized:\\n\\n${lines}\\n\\nTotal: $${total.toFixed(2)} of $${budget.toFixed(2)} budget (${budgetLine})`;\nreturn [{ json: { text } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2048,
+        650
+      ],
+      "id": "code-format-finalize-message",
+      "name": "Format Finalize Message"
+    },
+    {
+      "parameters": {
+        "chatId": "1662316637",
+        "operation": "sendMessage",
+        "text": "={{ $json.text }}"
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2272,
+        650
+      ],
+      "id": "telegram-send-finalize-summary",
+      "name": "Send Finalize Summary",
+      "notes": "On Error MUST be set to Continue on this node (Settings tab) -- an unhandled error here would block the whole webhook response the same way Check Budget Alert did before that was fixed earlier tonight, since this sits on a shared execution even though it's a parallel branch. Use the SAME Telegram bot credential already connected for Budget Alert Listener/Check-In Agent (household chat 1662316637), not a new one.",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_BOT_NAME"
+        }
+      }
     }
   ],
   "connections": {
@@ -485,6 +714,115 @@
           },
           {
             "node": "Get Settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get All ShoppingList Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Current List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get All ShoppingList Rows": {
+      "main": [
+        [
+          {
+            "node": "Count Rows to Clear",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Rows to Clear": {
+      "main": [
+        [
+          {
+            "node": "Has Rows to Clear?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Rows to Clear?": {
+      "main": [
+        [
+          {
+            "node": "Clear ShoppingList Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Current List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear ShoppingList Rows": {
+      "main": [
+        [
+          {
+            "node": "Get Current List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Finalize?": {
+      "main": [
+        [
+          {
+            "node": "Format Finalize Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not Finalize - No Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Finalize Message": {
+      "main": [
+        [
+          {
+            "node": "Send Finalize Summary",
             "type": "main",
             "index": 0
           }
@@ -584,6 +922,11 @@
         [
           {
             "node": "Return List + Totals",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Finalize?",
             "type": "main",
             "index": 0
           }
