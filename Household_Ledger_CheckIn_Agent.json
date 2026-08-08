@@ -173,7 +173,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Payload posted by the Reply Listener workflow's Call Resume Webhook node.\nconst body = $input.first().json || {};\nreturn [{ json: { lowItems: body.lowItems || [], finishedItems: body.finishedItems || [] } }];"
+        "jsCode": "// Payload posted by the Reply Listener workflow's Call Resume Webhook node.\n// The raw webhook resume payload wraps the real POST body under a nested `.body` key\n// alongside headers/params/query/webhookUrl/executionMode -- reading $input.first().json\n// directly (without the extra `.body`) grabs that whole wrapper instead of the actual\n// { lowItems, finishedItems } payload, so body.finishedItems was always undefined and\n// silently fell back to []. Found live 2026-08-08 after a long chain of downstream nodes\n// (Compute Inventory Updates, Resolve Auto-Add Rows) all correctly produced nothing given\n// this node's genuinely-empty output -- root cause was here the whole time, not in any of\n// tonight's other fixes.\nconst body = $input.first().json.body || {};\nreturn [{ json: { lowItems: body.lowItems || [], finishedItems: body.finishedItems || [] } }];"
       },
       "id": "code-parse-resume-payload",
       "name": "Read Parsed Reply",
