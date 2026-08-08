@@ -277,7 +277,7 @@ export default function HouseholdLedger() {
   const recurring = CATALOG.filter((i) => /recurring/.test(i.note || ""));
 
   return (
-    <div className="min-h-screen bg-[#0F1E3D] text-[#F2F0E6] font-serif">
+    <div className="min-h-screen overflow-x-hidden bg-[#0F1E3D] text-[#F2F0E6] font-serif">
       <style>{`
         .font-serif { font-family: Georgia, 'Times New Roman', serif; }
         .font-mono-tab { font-family: 'Courier New', Courier, monospace; }
@@ -468,7 +468,88 @@ export default function HouseholdLedger() {
             </div>
           ) : (
             <div className="border border-[#F2F0E6] bg-[#16264A]">
-              <table className="w-full text-sm">
+              <div className="md:hidden divide-y divide-[#3D5178]">
+                {list.map((item) => {
+                  const storeNames = Object.keys(item.stores);
+                  const lowest = bestStore(item.stores)[0];
+                  return (
+                    <div key={item.name} className="p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            {item.name}
+                            {item.sizeUnknown && (
+                              <span title={item.note}>
+                                <AlertTriangle size={12} className="text-[#C98A2C]" />
+                              </span>
+                            )}
+                          </div>
+                          {item.note && !item.sizeUnknown && (
+                            <div className="text-xs text-[#93A3C4]">{item.note}</div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => removeItem(item.name)}
+                          className="shrink-0 text-[#93A3C4] hover:text-[#E8756A]"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        {storeNames.length > 1 ? (
+                          <select
+                            value={item.store}
+                            onChange={(e) => setStoreFor(item.name, e.target.value)}
+                            className="border border-[#3D5178] rounded-sm text-xs px-1 py-0.5 bg-[#16264A]"
+                          >
+                            {storeNames.map((s) => (
+                              <option key={s} value={s}>
+                                {s} {s === lowest ? "(lowest)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-xs text-[#B8C2D9]">{item.store}</span>
+                        )}
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setQty(item.name, item.qty - 1)}
+                            className="p-0.5 border border-[#3D5178] rounded-sm hover:bg-[#1B2E52]"
+                          >
+                            <Minus size={11} />
+                          </button>
+                          <span className="w-5 text-center font-mono-tab">{item.qty}</span>
+                          <button
+                            onClick={() => setQty(item.name, item.qty + 1)}
+                            className="p-0.5 border border-[#3D5178] rounded-sm hover:bg-[#1B2E52]"
+                          >
+                            <Plus size={11} />
+                          </button>
+                        </div>
+
+                        <div className="text-right font-mono-tab">
+                          <div>${(item.price * item.qty).toFixed(2)}</div>
+                          <div className="text-[10px] text-[#93A3C4]">
+                            ${item.price.toFixed(2)} ea
+                            {unitPriceOf(item.stores[item.store]) !== null && (
+                              <>
+                                {" "}
+                                · {unitLabelOf(item.stores[item.store])}{" "}
+                                {unitPriceOf(item.stores[item.store]).toFixed(2)}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm min-w-[560px]">
                 <thead>
                   <tr className="border-b border-[#F2F0E6] text-left text-xs uppercase tracking-widest text-[#93A3C4]">
                     <th className="py-2 px-3 font-normal">Item</th>
@@ -557,6 +638,7 @@ export default function HouseholdLedger() {
                   })}
                 </tbody>
               </table>
+              </div>
 
               <div className="dashed-top" />
 

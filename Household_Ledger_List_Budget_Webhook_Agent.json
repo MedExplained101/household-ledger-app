@@ -268,6 +268,7 @@
       },
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
+      "alwaysOutputData": true,
       "position": [
         720,
         464
@@ -279,7 +280,38 @@
           "id": "zz9INbfV79dYEmQl",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "notes": "alwaysOutputData so a genuine no-match (item already removed, name mismatch, etc.) passes through as an empty placeholder instead of halting this branch -- see Found Row to Remove? gate right after, added 2026-08-08."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ String($json.row_number || \"\") }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-found-row-to-remove",
+      "name": "Found Row to Remove?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        830,
+        464
+      ],
+      "notes": "Fixes the documented 'if the item wasn't found, this will error -- acceptable for v1' gap on Delete Row: an unhandled error here used to block the whole webhook response (same failure class as the Check Budget Alert outage from earlier tonight), taking the entire app offline on a single failed remove instead of just no-op'ing that one action. False branch skips straight to Get Current List/Get Settings so the webhook still returns a valid, unchanged list. Left value uses `|| \"\"` because the alwaysOutputData placeholder has no row_number key at all (JS undefined), and undefined !== \"\" would otherwise be true. Wrapped in String(...) because Google Sheets returns row_number as a real number, and this node's strict type validation throws on comparing a number against a string operator rather than silently coercing it (found live 2026-08-08, right after the underlying Find Row to Remove filter itself got fixed)."
     },
     {
       "parameters": {
@@ -294,7 +326,7 @@
           "value": "ShoppingList",
           "mode": "name"
         },
-        "startIndex": "={{ $json.row_number - 1 }}"
+        "startIndex": "={{ $json.row_number }}"
       },
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
@@ -304,6 +336,7 @@
       ],
       "id": "de585755-0c0b-4fb0-b727-053844823c80",
       "name": "Delete Row",
+      "notes": "Start Row Number is 1-indexed directly against the real sheet row (not 0-indexed against the raw grid as assumed when this was first built) -- row_number - 1 deleted the header row (sheet row 1) instead of the target item, confirmed live 2026-08-08 when a real delete on row_number:2 (Watermelon) wiped ShoppingList's header row instead, breaking every node that reads this sheet by column name. Fixed by removing the -1; row_number from Find Row to Remove already matches this field's expected value directly.",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "zz9INbfV79dYEmQl",
@@ -478,7 +511,30 @@
       "main": [
         [
           {
+            "node": "Found Row to Remove?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Found Row to Remove?": {
+      "main": [
+        [
+          {
             "node": "Delete Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Current List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Settings",
             "type": "main",
             "index": 0
           }

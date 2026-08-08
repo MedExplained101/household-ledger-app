@@ -16,12 +16,13 @@ Create one new spreadsheet named `Household Ledger` with these tabs. Column orde
 - `item` is the matching key the Webhook Agent upserts on — must exactly match `Catalog.item`
 
 ## Tab: `Settings`
-| budget | cadence | CheckIn_Status | CheckIn_ResumeURL |
-|---|---|---|---|
-| 200 | Week | idle | |
+| budget | cadence | CheckIn_Status | CheckIn_ResumeURL | home_address |
+|---|---|---|---|---|
+| 200 | Week | idle | | |
 
 - Single row, values editable from the app or directly in Sheets
 - `CheckIn_Status`/`CheckIn_ResumeURL` — needed by `Household_Ledger_CheckIn_Agent.json`'s pause/resume mechanism (see that file and `Household_Ledger_CheckIn_Reply_Listener.json`). Mirrors the `Status`/`ResumeURL` columns BNS's own Telegram Approval Listener uses on its `Calendar` tab, just on this single-row tab instead of a per-day row, since there's only ever one household check-in pending at a time. Already live in the real spreadsheet (`provision_sheet.py` creates these columns).
+- `home_address` — added 2026-08-01 for Open Decision #5 (resolved: auto-geocoding). Used by `Household_Ledger_Recommendation_Agent.json`'s geocoding step as the origin address for distance lookups. **Left blank by default and not committed anywhere** — a real street address is personal information, so this must be filled in by hand directly in the live Sheet, never in a file checked into this repo. Until it's filled in, the geocoding step skips (no origin to measure from) and `Stores` distances stay manual/empty, same as before this feature existed.
 
 ## Tab: `PriceLog`
 | item | store | price | date | status | scraped_at |
