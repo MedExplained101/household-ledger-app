@@ -326,7 +326,7 @@
           "value": "ShoppingList",
           "mode": "name"
         },
-        "startIndex": "={{ $json.row_number - 1 }}"
+        "startIndex": "={{ $json.row_number }}"
       },
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
@@ -336,6 +336,7 @@
       ],
       "id": "de585755-0c0b-4fb0-b727-053844823c80",
       "name": "Delete Row",
+      "notes": "Start Row Number is 1-indexed directly against the real sheet row (not 0-indexed against the raw grid as assumed when this was first built) -- row_number - 1 deleted the header row (sheet row 1) instead of the target item, confirmed live 2026-08-08 when a real delete on row_number:2 (Watermelon) wiped ShoppingList's header row instead, breaking every node that reads this sheet by column name. Fixed by removing the -1; row_number from Find Row to Remove already matches this field's expected value directly.",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "zz9INbfV79dYEmQl",
