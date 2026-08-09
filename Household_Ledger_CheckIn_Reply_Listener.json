@@ -3,8 +3,8 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## DEPLOYED \u2014 live in n8n since 2026-07-31\nCompanion to Household_Ledger_CheckIn_Agent.json \u2014 runs 24/7 alongside it, same as how BNS's Telegram Approval Listener runs alongside its main content workflow. Node shape below is a direct adaptation of beautifulnaturescenes-/beautiful_naturescenes_telegram_approval_listener_workflow.json (read directly to reuse the real pattern rather than inventing a new one) \u2014 swapped from YES/NO parsing to the LOW:/FINISHED: list format the Check-In Agent's message asks for.\n\nSTATUS: real Telegram bot credential (shared dedicated household bot, Open Decision #3 resolved), Google Sheets credential, real spreadsheet ID, and real household chat ID all wired; workflow published. Not yet live-tested end-to-end.\n\nHOW IT WORKS: fires on every message to the bot, filters to the household chat, parses LOW:/FINISHED:/NONE replies, reads Settings for a pending CheckIn_ResumeURL, and POSTs the parsed lists to that URL \u2014 waking the paused Check-In Agent execution.",
-        "height": 480,
+        "content": "## DEPLOYED \u2014 live in n8n since 2026-07-31\nCompanion to Household_Ledger_CheckIn_Agent.json \u2014 runs 24/7 alongside it, same as how BNS's Telegram Approval Listener runs alongside its main content workflow. Node shape below is a direct adaptation of beautifulnaturescenes-/beautiful_naturescenes_telegram_approval_listener_workflow.json (read directly to reuse the real pattern rather than inventing a new one) \u2014 swapped from YES/NO parsing to the LOW:/FINISHED: list format the Check-In Agent's message asks for.\n\nSTATUS: real Telegram bot credential (shared dedicated household bot, Open Decision #3 resolved), Google Sheets credential, real spreadsheet ID, and real household chat ID all wired; workflow published. Not yet live-tested end-to-end.\n\nHOW IT WORKS: fires on every message to the bot, filters to the household chat, parses LOW:/FINISHED:/NONE replies, reads Settings for a pending CheckIn_ResumeURL, and POSTs the parsed lists to that URL \u2014 waking the paused Check-In Agent execution.\n\nUPDATED 2026-08-09: added a 'Has Photo?' branch right after 'From Household Chat?', before Parse Reply \u2014 this bot owns the household's only Telegram Trigger (n8n allows just one per bot), so Household_Ledger_Price_Ingestion_Agent.json is invoked as a sub-workflow from here rather than getting its own trigger. Text messages fall through to the existing Parse Reply path completely unchanged.",
+        "height": 560,
         "width": 460
       },
       "id": "note-1",
@@ -71,6 +71,49 @@
         -560,
         220
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "leftValue": "={{ Array.isArray($json.message.photo) && $json.message.photo.length > 0 }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "if-has-photo",
+      "name": "Has Photo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-780, -140],
+      "notes": "Added 2026-08-09. True branch hands the message off to the Price Ingestion Agent sub-workflow; false (text) branch continues to Parse Reply exactly as before."
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_PRICE_INGESTION_WORKFLOW_ID",
+          "mode": "list",
+          "cachedResultName": "Household Ledger - Price Ingestion Agent"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message": "={{ $json.message }}"
+          }
+        }
+      },
+      "id": "execute-price-ingestion",
+      "name": "Run Price Ingestion Agent",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [-560, -220],
+      "notes": "Passes the raw message object through unchanged, matching what a direct Telegram Trigger would have produced, so the sub-workflow's existing $json.message.* references need no adjustment. Wire the real workflowId live once Price Ingestion Agent has been imported and its n8n-assigned ID is known (same REPLACE_WITH_* pattern used for Budget Alert Listener's Execute Workflow call)."
     },
     {
       "parameters": {
@@ -257,7 +300,7 @@
       "main": [
         [
           {
-            "node": "Parse Reply",
+            "node": "Has Photo?",
             "type": "main",
             "index": 0
           }
@@ -265,6 +308,24 @@
         [
           {
             "node": "Ignore - Wrong Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Photo?": {
+      "main": [
+        [
+          {
+            "node": "Run Price Ingestion Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Parse Reply",
             "type": "main",
             "index": 0
           }

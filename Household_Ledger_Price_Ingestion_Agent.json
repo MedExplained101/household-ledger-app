@@ -3,8 +3,8 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## Price Ingestion Agent\nReceipt half of price ingestion (the Price Refresh Agent covers the other half: scheduled live web-scrape refreshes for items not recently repurchased). Reuses the same dedicated household Telegram bot as Check-In/Budget Alert \u2014 send it a photo of a receipt, it extracts every line item via vision LLM and writes them straight into Catalog + PriceLog with confidence: receipt, no 24-48h staging hold, since a receipt is a real observed purchase (ground truth), not an estimate.\n\nSame structured-JSON-only extraction discipline as the Price Refresh Agent (CLAUDE.md \u00a75, 'never free text'). New items (never before in Catalog) are created via appendOrUpdate rather than the Price Refresh Agent's plain update, since a receipt can introduce a first-time item.\n\nSTATUS: built 2026-08-09, not yet wired with real credentials or live-tested \u2014 needs the same live-application pass as every other agent in this project (Telegram bot credential, Google Sheets credential, Anthropic credential, real spreadsheet ID).",
-        "height": 480,
+        "content": "## Price Ingestion Agent\nReceipt half of price ingestion (the Price Refresh Agent covers the other half: scheduled live web-scrape refreshes for items not recently repurchased). Reuses the same dedicated household Telegram bot as Check-In/Budget Alert \u2014 send it a photo of a receipt, it extracts every line item via vision LLM and writes them straight into Catalog + PriceLog with confidence: receipt, no 24-48h staging hold, since a receipt is a real observed purchase (ground truth), not an estimate.\n\nSame structured-JSON-only extraction discipline as the Price Refresh Agent (CLAUDE.md \u00a75, 'never free text'). New items (never before in Catalog) are created via appendOrUpdate rather than the Price Refresh Agent's plain update, since a receipt can introduce a first-time item.\n\nSUB-WORKFLOW, not its own Telegram trigger: n8n only allows one Telegram Trigger per bot, and Check-In Reply Listener already owns it. This workflow is invoked via Execute Workflow from a new 'Has Photo?' branch added to Check-In Reply Listener (before its existing Parse Reply node), which forwards the raw { message } object unchanged \u2014 so everything downstream here still reads $json.message.* exactly as if this were still a direct trigger.\n\nSTATUS: built 2026-08-09, not yet wired with real credentials or live-tested \u2014 needs the same live-application pass as every other agent in this project (Google Sheets credential, Anthropic credential, real spreadsheet ID, and wiring the calling branch into Check-In Reply Listener).",
+        "height": 560,
         "width": 460
       },
       "id": "note-1",
@@ -15,47 +15,18 @@
     },
     {
       "parameters": {
-        "updates": ["message"]
-      },
-      "id": "telegram-trigger",
-      "name": "Listen for Receipt Photo",
-      "type": "n8n-nodes-base.telegramTrigger",
-      "typeVersion": 1.1,
-      "position": [-1400, 100],
-      "notes": "Fires on every message to the bot, from anyone (same shape as the Check-In Reply Listener) \u2014 the next node filters to the household chat, the one after that filters to photo messages only, so this bot can keep handling check-in text replies and receipt photos on the same trigger.",
-      "credentials": {
-        "telegramApi": {
-          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
-          "name": "Household Ledger Bot"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
-          "conditions": [
-            {
-              "leftValue": "={{ $json.message.chat.id }}",
-              "rightValue": "1662316637",
-              "operator": { "type": "string", "operation": "equals" }
-            }
+        "workflowInputs": {
+          "values": [
+            { "name": "message" }
           ]
         }
       },
-      "id": "if-correct-chat",
-      "name": "From Household Chat?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [-1180, 100]
-    },
-    {
-      "parameters": {},
-      "id": "noop-wrong-chat",
-      "name": "Ignore - Wrong Chat",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [-960, 260]
+      "id": "execute-workflow-trigger",
+      "name": "Called by Check-In Reply Listener",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-1400, 100],
+      "notes": "Entry point when Check-In Reply Listener's 'Has Photo?' branch forwards a photo message here via Execute Workflow \u2014 see Setup Notes. Receives { message } shaped identically to a raw Telegram Trigger output, so 'Has Photo?' below can still be a genuine defensive re-check rather than blind trust of the caller."
     },
     {
       "parameters": {
@@ -319,13 +290,7 @@
     }
   ],
   "connections": {
-    "Listen for Receipt Photo": { "main": [[{ "node": "From Household Chat?", "type": "main", "index": 0 }]] },
-    "From Household Chat?": {
-      "main": [
-        [{ "node": "Has Photo?", "type": "main", "index": 0 }],
-        [{ "node": "Ignore - Wrong Chat", "type": "main", "index": 0 }]
-      ]
-    },
+    "Called by Check-In Reply Listener": { "main": [[{ "node": "Has Photo?", "type": "main", "index": 0 }]] },
     "Has Photo?": {
       "main": [
         [{ "node": "Pick Largest Photo", "type": "main", "index": 0 }],
