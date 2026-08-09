@@ -9,7 +9,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## SETUP TODOs\n1. Replace `documentId` on every Google Sheets node below with your Household Ledger spreadsheet ID (see household-ledger-sheets-schema.md)\n2. Connect your Google Sheets credential (reused the same credential ID as your BNS workflows below \u2014 adjust if this is a different Google account)\n3. Activate this workflow, then grab the Production webhook URL from the Webhook node \u2014 that's what the mobile app POSTs to\n\nExpected POST body:\n`{ \"action\": \"get\" }`\n`{ \"action\": \"upsert\", \"item\": \"Basmati Rice\", \"category\": \"Pantry\", \"store\": \"Walmart\", \"price\": 9.52, \"qty\": 1, \"cadence\": \"Week\" }`\n`{ \"action\": \"remove\", \"item\": \"Basmati Rice\" }`\n`{ \"action\": \"clear\" }` \u2014 added 2026-08-08, empties every ShoppingList row (keeps the header)\n`{ \"action\": \"finalize\" }` \u2014 added 2026-08-08, doesn't change the list; sends a Telegram summary of the current list + total, same response shape as `get`\n\nResponse: `{ \"list\": [...rows], \"total\": 42.10, \"budget\": 200, \"remaining\": 157.90 }`\n\nSETUP TODO for `finalize`: `Send Finalize Summary`'s Telegram credential still shows a placeholder \u2014 wire it to the same bot already connected for Budget Alert Listener/Check-In Agent. Also verify `Clear ShoppingList Rows`' \"Number of Rows to Delete\" field live (written as `rowsToDelete` here by analogy, not confirmed against the real node schema).",
+        "content": "## SETUP TODOs\n1. Replace `documentId` on every Google Sheets node below with your Household Ledger spreadsheet ID (see household-ledger-sheets-schema.md)\n2. Connect your Google Sheets credential (reused the same credential ID as your BNS workflows below \u2014 adjust if this is a different Google account)\n3. Activate this workflow, then grab the Production webhook URL from the Webhook node \u2014 that's what the mobile app POSTs to\n4. Create the `LastSavedList` tab (see household-ledger-sheets-schema.md) \u2014 same columns as `ShoppingList`. Needed for the `finalize`/`recall` pair below.\n\nExpected POST body:\n`{ \"action\": \"get\" }`\n`{ \"action\": \"upsert\", \"item\": \"Basmati Rice\", \"category\": \"Pantry\", \"store\": \"Walmart\", \"price\": 9.52, \"qty\": 1, \"cadence\": \"Week\" }`\n`{ \"action\": \"remove\", \"item\": \"Basmati Rice\" }`\n`{ \"action\": \"clear\" }` \u2014 empties every ShoppingList row (keeps the header)\n`{ \"action\": \"finalize\" }` \u2014 doesn't change ShoppingList; sends a Telegram summary of the current list + total, and snapshots the list into LastSavedList (clear+append) so it survives a later `clear`. Same response shape as `get`.\n`{ \"action\": \"recall\" }` \u2014 added 2026-08-09, upserts every row from LastSavedList into ShoppingList (merges on top, matched on item \u2014 same as a normal upsert), letting next week's list start from last week's finalized one. Same response shape as `get`.\n\nResponse: `{ \"list\": [...rows], \"total\": 42.10, \"budget\": 200, \"remaining\": 157.90 }`\n\nConfirmed live 2026-08-08: Clear All and Save List (finalize+Telegram) both working end-to-end, Send Finalize Summary's real bot credential wired with On Error set to Continue.\n\nSETUP TODO for `recall`/snapshot (2026-08-09, not yet applied live): the new LastSavedList-clearing chain (`Get LastSavedList Rows to Clear` \u2192 ... \u2192 `Snapshot to LastSavedList`) has `onError: continueRegularOutput` pre-set in this file rather than left to configure live, since we now know that field name \u2014 worth a quick visual double-check in the node Settings tab once live, same as was done for Send Finalize Summary. Also double check the `rowsToDelete` field name on `Clear LastSavedList Rows` the same way it was verified on `Clear ShoppingList Rows`.",
         "height": 460,
         "width": 380
       },
@@ -157,6 +157,29 @@
               },
               "renameOutput": true,
               "outputKey": "Finalize"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "recall",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Recall"
             }
           ]
         },
@@ -382,14 +405,13 @@
       ],
       "id": "de585755-0c0b-4fb0-b727-053844823c80",
       "name": "Delete Row",
-      "notes": "Start Row Number is 1-indexed directly against the real sheet row (not 0-indexed against the raw grid as assumed when this was first built) -- row_number - 1 deleted the header row (sheet row 1) instead of the target item, confirmed live 2026-08-08 when a real delete on row_number:2 (Watermelon) wiped ShoppingList's header row instead, breaking every node that reads this sheet by column name. Fixed by removing the -1; row_number from Find Row to Remove already matches this field's expected value directly.",
+      "notes": "Uses row_number returned by the lookup node just before this. If the item wasn't found, this will error \u2014 acceptable for v1, revisit with an IF-guard later.",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "zz9INbfV79dYEmQl",
           "name": "Google Sheets account"
         }
-      },
-      "notes": "Uses row_number returned by the lookup node just before this. If the item wasn't found, this will error \u2014 acceptable for v1, revisit with an IF-guard later."
+      }
     },
     {
       "parameters": {
@@ -676,6 +698,405 @@
           "name": "REPLACE_WITH_BOT_NAME"
         }
       }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "LastSavedList",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "sheets-get-last-saved-list",
+      "name": "Get Last Saved List Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        720,
+        900
+      ],
+      "notes": "Unfiltered read of LastSavedList -- reads whatever the most recent finalize snapshotted there. If nothing's ever been finalized, this returns 0 rows and Recall to ShoppingList below just no-ops. Added 2026-08-09 for the Load Last List feature.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "ShoppingList",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $json.item }}",
+            "category": "={{ $json.category }}",
+            "store": "={{ $json.store }}",
+            "price": "={{ $json.price }}",
+            "qty": "={{ $json.qty }}",
+            "cadence": "={{ $json.cadence }}",
+            "added_date": "={{ $now.format('yyyy-MM-dd') }}"
+          },
+          "matchingColumns": [
+            "item"
+          ],
+          "schema": [
+            {
+              "id": "item",
+              "displayName": "item",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "store",
+              "displayName": "store",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "qty",
+              "displayName": "qty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "cadence",
+              "displayName": "cadence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "added_date",
+              "displayName": "added_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "sheets-recall-to-shoppinglist",
+      "name": "Recall to ShoppingList",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        940,
+        900
+      ],
+      "alwaysOutputData": true,
+      "notes": "Upserts every row from LastSavedList into ShoppingList, matched on item -- merges on top of whatever's already in the list rather than replacing it (per product decision 2026-08-09), same appendOrUpdate pattern as the regular Upsert action. One input item per row (Google Sheets node runs one operation per input item), so N rows in LastSavedList becomes N upserts here. alwaysOutputData is required: if LastSavedList is empty (0 rows in), this node would otherwise produce 0 output items and Get Current List/Get Settings downstream would never fire at all -- same class of bug fixed on Find Row to Remove earlier this project.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "LastSavedList",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "sheets-get-lastsaved-rows-to-clear",
+      "name": "Get LastSavedList Rows to Clear",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2048,
+        820
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Fire-and-forget snapshot branch, parallel to Format Finalize Message -- must never block Return List + Totals, so onError is set to Continue on every node in this chain (same lesson as Check Budget Alert's original outage). Reads current row count in LastSavedList before clearing it, same clear+append pattern as Clear ShoppingList Rows. Added 2026-08-09 for Load Last List.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { count: $input.all().length } }];"
+      },
+      "id": "code-count-lastsaved-rows-to-clear",
+      "name": "Count LastSavedList Rows to Clear",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2270,
+        820
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-has-lastsaved-rows-to-clear",
+      "name": "Has LastSavedList Rows to Clear?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2492,
+        820
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "LastSavedList",
+          "mode": "name"
+        },
+        "startIndex": 2,
+        "rowsToDelete": "={{ $json.count }}"
+      },
+      "id": "sheets-clear-lastsavedlist-rows",
+      "name": "Clear LastSavedList Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2714,
+        760
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Same startIndex=2 (1-indexed directly against the real sheet row) and rowsToDelete field-name caveat as Clear ShoppingList Rows -- verify the 'Number of Rows to Delete' field live if it doesn't load correctly.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rebuilds the finalized list as one item per row for appending to LastSavedList.\n// Named reference back to Is Finalize? (not bare $json) because this node sits\n// downstream of the Clear LastSavedList Rows/count sub-chain, which has replaced\n// $json with row-count data by this point -- same wrong-payload-level bug class\n// fixed elsewhere in this project.\nconst list = $('Is Finalize?').first().json.list || [];\nconst today = $now.format('yyyy-MM-dd');\nreturn list.map((r) => ({\n  json: {\n    item: r.item,\n    category: r.category,\n    store: r.store,\n    price: r.price,\n    qty: r.qty,\n    cadence: r.cadence,\n    added_date: today\n  }\n}));"
+      },
+      "id": "code-split-list-for-snapshot",
+      "name": "Split List for Snapshot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2936,
+        820
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "LastSavedList",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $json.item }}",
+            "category": "={{ $json.category }}",
+            "store": "={{ $json.store }}",
+            "price": "={{ $json.price }}",
+            "qty": "={{ $json.qty }}",
+            "cadence": "={{ $json.cadence }}",
+            "added_date": "={{ $json.added_date }}"
+          },
+          "matchingColumns": [
+            "item"
+          ],
+          "schema": [
+            {
+              "id": "item",
+              "displayName": "item",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "store",
+              "displayName": "store",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "price",
+              "displayName": "price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "qty",
+              "displayName": "qty",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "cadence",
+              "displayName": "cadence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "added_date",
+              "displayName": "added_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "sheets-snapshot-to-lastsavedlist",
+      "name": "Snapshot to LastSavedList",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3158,
+        820
+      ],
+      "onError": "continueRegularOutput",
+      "notes": "Writes the just-finalized list into LastSavedList, one append per item. If Split List for Snapshot produced 0 items (empty list finalized), this simply runs 0 times -- no error.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
     }
   ],
   "connections": {
@@ -733,6 +1154,13 @@
           },
           {
             "node": "Get Settings",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Last Saved List Rows",
             "type": "main",
             "index": 0
           }
@@ -805,6 +1233,11 @@
         [
           {
             "node": "Format Finalize Message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get LastSavedList Rows to Clear",
             "type": "main",
             "index": 0
           }
@@ -927,6 +1360,95 @@
           },
           {
             "node": "Is Finalize?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Last Saved List Rows": {
+      "main": [
+        [
+          {
+            "node": "Recall to ShoppingList",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recall to ShoppingList": {
+      "main": [
+        [
+          {
+            "node": "Get Current List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get LastSavedList Rows to Clear": {
+      "main": [
+        [
+          {
+            "node": "Count LastSavedList Rows to Clear",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count LastSavedList Rows to Clear": {
+      "main": [
+        [
+          {
+            "node": "Has LastSavedList Rows to Clear?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has LastSavedList Rows to Clear?": {
+      "main": [
+        [
+          {
+            "node": "Clear LastSavedList Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Split List for Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clear LastSavedList Rows": {
+      "main": [
+        [
+          {
+            "node": "Split List for Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split List for Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Snapshot to LastSavedList",
             "type": "main",
             "index": 0
           }

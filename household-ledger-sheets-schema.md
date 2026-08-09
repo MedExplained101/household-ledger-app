@@ -15,6 +15,12 @@ Create one new spreadsheet named `Household Ledger` with these tabs. Column orde
 
 - `item` is the matching key the Webhook Agent upserts on — must exactly match `Catalog.item`
 
+## Tab: `LastSavedList`
+| item | category | store | price | qty | cadence | added_date |
+|---|---|---|---|---|---|---|
+
+- Same columns as `ShoppingList` — a single-snapshot mirror, not an append-only history. Added 2026-08-08 for the "Load last list" feature: on every `finalize`, the Webhook Agent clears this tab and re-appends the just-finalized list here (same clear+append pattern as `Clear ShoppingList Rows`), so the list survives a subsequent `Clear all` on `ShoppingList`. The `recall` action reads this tab and upserts its rows into `ShoppingList` (merging on top of whatever's already there, matched on `item` — same as a normal `upsert`), letting next week's list start from last week's as a base.
+
 ## Tab: `Settings`
 | budget | cadence | CheckIn_Status | CheckIn_ResumeURL | home_address |
 |---|---|---|---|---|

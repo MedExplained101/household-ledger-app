@@ -297,6 +297,19 @@ export default function HouseholdLedger() {
     }
   }
 
+  async function loadLastList() {
+    setSyncing(true);
+    setError(null);
+    try {
+      const data = await callWebhook({ action: "recall" });
+      applyServerState(data);
+    } catch {
+      setError("Couldn't load last saved list — try again.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const filteredCatalog = useMemo(() => {
     if (!query.trim()) return null;
     const q = query.toLowerCase();
@@ -698,13 +711,22 @@ export default function HouseholdLedger() {
               <div className="dashed-top" />
 
               <div className="px-3 py-3 flex items-center justify-between gap-3">
-                <button
-                  onClick={clearAll}
-                  disabled={syncing}
-                  className="text-xs uppercase tracking-widest text-[#93A3C4] hover:text-[#E8756A] disabled:opacity-50"
-                >
-                  Clear all
-                </button>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={clearAll}
+                    disabled={syncing}
+                    className="text-xs uppercase tracking-widest text-[#93A3C4] hover:text-[#E8756A] disabled:opacity-50"
+                  >
+                    Clear all
+                  </button>
+                  <button
+                    onClick={loadLastList}
+                    disabled={syncing}
+                    className="text-xs uppercase tracking-widest text-[#93A3C4] hover:text-[#F2F0E6] disabled:opacity-50"
+                  >
+                    Load last list
+                  </button>
+                </div>
                 <button
                   onClick={finalizeList}
                   disabled={syncing}
