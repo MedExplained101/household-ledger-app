@@ -549,7 +549,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Filters out the alwaysOutputData placeholder (no `item` field) so an empty\n// sheet correctly counts as 0 real rows, not 1.\nconst items = $input.all().filter((i) => i.json && i.json.item);\nreturn [{ json: { count: items.length } }];"
+        "jsCode": "// Filters out only the alwaysOutputData synthetic placeholder (no row_number --\n// it doesn't correspond to a real sheet row at all). A genuine blank/stray row\n// still has a real row_number and must still count toward deletion, or Clear\n// leaves it (and whatever real row follows it) behind -- found live 2026-08-09\n// when a stray blank row 2 in ShoppingList caused exactly that.\nconst items = $input.all().filter((i) => i.json && i.json.row_number !== undefined);\nreturn [{ json: { count: items.length } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -889,7 +889,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Filters out the alwaysOutputData placeholder (no `item` field) so an empty\n// sheet correctly counts as 0 real rows, not 1.\nconst items = $input.all().filter((i) => i.json && i.json.item);\nreturn [{ json: { count: items.length } }];"
+        "jsCode": "// Filters out only the alwaysOutputData synthetic placeholder (no row_number --\n// it doesn't correspond to a real sheet row at all). A genuine blank/stray row\n// still has a real row_number and must still count toward deletion, or Clear\n// leaves it (and whatever real row follows it) behind -- found live 2026-08-09\n// when a stray blank row 2 in ShoppingList caused exactly that.\nconst items = $input.all().filter((i) => i.json && i.json.row_number !== undefined);\nreturn [{ json: { count: items.length } }];"
       },
       "id": "code-count-lastsaved-rows-to-clear",
       "name": "Count LastSavedList Rows to Clear",
