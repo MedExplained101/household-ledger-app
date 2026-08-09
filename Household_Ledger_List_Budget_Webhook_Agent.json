@@ -437,6 +437,8 @@
       ],
       "id": "d4d22cf1-8b3f-46cc-b659-cec304257667",
       "name": "Get Current List",
+      "executeOnce": true,
+      "notes": "UPDATED 2026-08-09: executeOnce added -- without it, this re-runs once per input item, so an action producing multiple upstream items (e.g. Recall to ShoppingList upserting N rows) duplicated the whole returned list N times. Should always run exactly once regardless of how many items triggered this shared response path.",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "zz9INbfV79dYEmQl",
@@ -468,6 +470,8 @@
       ],
       "id": "22e71111-5968-4dd9-bf28-e5af23c4c49e",
       "name": "Get Settings",
+      "executeOnce": true,
+      "notes": "UPDATED 2026-08-09: same executeOnce fix as Get Current List, same reason -- always read Settings exactly once for the shared response path, regardless of upstream item count.",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "zz9INbfV79dYEmQl",
@@ -603,7 +607,7 @@
           "value": "ShoppingList",
           "mode": "name"
         },
-        "startIndex": 2,
+        "startIndex": "={{ Math.min(...$('Get All ShoppingList Rows').all().filter(i => i.json && i.json.row_number !== undefined).map(i => i.json.row_number)) }}",
         "rowsToDelete": "={{ $json.count }}"
       },
       "type": "n8n-nodes-base.googleSheets",
@@ -614,7 +618,7 @@
       ],
       "id": "sheets-clear-shoppinglist-rows",
       "name": "Clear ShoppingList Rows",
-      "notes": "SETUP TODO: verify the 'Number of Rows to Delete' field's actual parameter key live in n8n -- written here as rowsToDelete by analogy, not confirmed against the real node schema the way startIndex was tonight. If it doesn't load correctly, open this node in the UI, re-enter Start Row Number as a fixed 2 (confirmed correct 2026-08-08: 1-indexed directly against the real sheet row, row 1 = header) and set Number of Rows to Delete to the expression {{ $json.count }} from whatever that field is actually labeled in your n8n version.",
+      "notes": "UPDATED 2026-08-09: Start Row Number changed from a hardcoded 2 to a dynamic expression computing the real minimum row_number from Get All ShoppingList Rows. The hardcoded 2 assumed real data always sits immediately after the header -- broke live when a gap ever formed between the header and the real rows (found during Recall/Snapshot testing), silently deleting the wrong (already-empty) rows and leaving the real stale rows untouched.",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "zz9INbfV79dYEmQl",
@@ -946,7 +950,7 @@
           "value": "LastSavedList",
           "mode": "name"
         },
-        "startIndex": 2,
+        "startIndex": "={{ Math.min(...$('Get LastSavedList Rows to Clear').all().filter(i => i.json && i.json.row_number !== undefined).map(i => i.json.row_number)) }}",
         "rowsToDelete": "={{ $json.count }}"
       },
       "id": "sheets-clear-lastsavedlist-rows",
@@ -958,7 +962,7 @@
         760
       ],
       "onError": "continueRegularOutput",
-      "notes": "Same startIndex=2 (1-indexed directly against the real sheet row) and rowsToDelete field-name caveat as Clear ShoppingList Rows -- verify the 'Number of Rows to Delete' field live if it doesn't load correctly.",
+      "notes": "UPDATED 2026-08-09: same dynamic-start-row fix as Clear ShoppingList Rows -- the hardcoded startIndex=2 broke live once a gap formed between the header and the real LastSavedList rows (found while testing Recall/Snapshot: two consecutive finalize calls duplicated instead of clearing first). Now computes the real minimum row_number from Get LastSavedList Rows to Clear.",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "zz9INbfV79dYEmQl",
