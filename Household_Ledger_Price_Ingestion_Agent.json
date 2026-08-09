@@ -17,7 +17,7 @@
       "parameters": {
         "workflowInputs": {
           "values": [
-            { "name": "message" }
+            { "name": "message", "type": "object" }
           ]
         }
       },
@@ -82,10 +82,23 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [-520, 20],
-      "notes": "Downloads the actual image bytes as binary (n8n's Telegram node resolves file_id \u2192 file_path \u2192 download internally, so the bot token never needs to be handled directly in this workflow). Binary lands on the default 'data' property \u2014 verify this live; if n8n uses a different default binary property name for this node/version, update the base64 reference in 'Extract Receipt via LLM' accordingly.",
+      "notes": "Downloads the actual image bytes as binary (n8n's Telegram node resolves file_id \u2192 file_path \u2192 download internally, so the bot token never needs to be handled directly in this workflow). Binary lands on the default 'data' property.",
       "credentials": {
         "telegramApi": { "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID", "name": "Household Ledger Bot" }
       }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const results = [];\nfor (let i = 0; i < $input.all().length; i++) {\nconst buffer = await this.helpers.getBinaryDataBuffer(i, 'data');\nresults.push({ json: { ...$input.all()[i].json, imageBase64: buffer.toString('base64') }, binary: $input.all()[i].binary });\n}\nreturn results;"
+      },
+      "id": "code-encode-base64",
+      "name": "Encode Photo as Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-410, 20],
+      "notes": "Fixed 2026-08-09 live: n8n Cloud uses filesystem-backed binary storage, so $binary.data.data evaluates to undefined in expressions (silently dropped by JSON serialization \u2014 Anthropic returned 'field required'). this.helpers.getBinaryDataBuffer() is the storage-agnostic way to get the actual bytes; referenced downstream as $json.imageBase64."
     },
     {
       "parameters": {
@@ -101,7 +114,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ {\n  \"model\": \"claude-sonnet-5\",\n  \"max_tokens\": 2000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"image\",\n        \"source\": { \"type\": \"base64\", \"media_type\": \"image/jpeg\", \"data\": $binary.data.data }\n      },\n      {\n        \"type\": \"text\",\n        \"text\": \"This is a photo of a grocery/household store receipt. Extract every line item you can read. Respond with ONLY a JSON object, no prose, no markdown fences: {\\\"store\\\": string, \\\"date\\\": string (YYYY-MM-DD, your best reading of the receipt date), \\\"items\\\": [{\\\"item\\\": string (product name as printed, cleaned up if obviously abbreviated), \\\"price\\\": number (this line's actual paid price), \\\"category\\\": string (one of: Produce, Dairy, Meat, Prepared, Seafood, Pantry, Frozen, Beverages, Snacks, Household), \\\"size\\\": string|null (pack size/weight ONLY if actually printed on the receipt \u2014 do not guess or estimate one), \\\"unit_label\\\": string|null (e.g. \\\"$/lb\\\", \\\"$/ct\\\" \u2014 only if size is non-null and a unit price is derivable)}]}. If any field for an item is genuinely unreadable or absent from the receipt, use null for that field rather than guessing \u2014 per this project's convention, an uncertain value must never be silently invented.\"\n      }\n    ]\n  }]\n} }}",
+        "jsonBody": "={{ {\n  \"model\": \"claude-sonnet-5\",\n  \"max_tokens\": 2000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"image\",\n        \"source\": { \"type\": \"base64\", \"media_type\": \"image/jpeg\", \"data\": $json.imageBase64 }\n      },\n      {\n        \"type\": \"text\",\n        \"text\": \"This is a photo of a grocery/household store receipt. Extract every line item you can read. Respond with ONLY a JSON object, no prose, no markdown fences: {\\\"store\\\": string, \\\"date\\\": string (YYYY-MM-DD, your best reading of the receipt date), \\\"items\\\": [{\\\"item\\\": string (product name as printed, cleaned up if obviously abbreviated), \\\"price\\\": number (this line's actual paid price), \\\"category\\\": string (one of: Produce, Dairy, Meat, Prepared, Seafood, Pantry, Frozen, Beverages, Snacks, Household), \\\"size\\\": string|null (pack size/weight ONLY if actually printed on the receipt \u2014 do not guess or estimate one), \\\"unit_label\\\": string|null (e.g. \\\"$/lb\\\", \\\"$/ct\\\" \u2014 only if size is non-null and a unit price is derivable)}]}. If any field for an item is genuinely unreadable or absent from the receipt, use null for that field rather than guessing \u2014 per this project's convention, an uncertain value must never be silently invented.\"\n      }\n    ]\n  }]\n} }}",
         "options": {}
       },
       "id": "http-extract-receipt",
@@ -298,7 +311,8 @@
       ]
     },
     "Pick Largest Photo": { "main": [[{ "node": "Download Receipt Photo", "type": "main", "index": 0 }]] },
-    "Download Receipt Photo": { "main": [[{ "node": "Extract Receipt via LLM", "type": "main", "index": 0 }]] },
+    "Download Receipt Photo": { "main": [[{ "node": "Encode Photo as Base64", "type": "main", "index": 0 }]] },
+    "Encode Photo as Base64": { "main": [[{ "node": "Extract Receipt via LLM", "type": "main", "index": 0 }]] },
     "Extract Receipt via LLM": { "main": [[{ "node": "Validate Extraction", "type": "main", "index": 0 }]] },
     "Validate Extraction": { "main": [[{ "node": "Extraction Valid?", "type": "main", "index": 0 }]] },
     "Extraction Valid?": {
