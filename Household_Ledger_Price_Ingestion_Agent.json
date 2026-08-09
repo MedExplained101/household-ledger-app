@@ -1,0 +1,370 @@
+{
+  "name": "Household Ledger - Price Ingestion Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Price Ingestion Agent\nReceipt half of price ingestion (the Price Refresh Agent covers the other half: scheduled live web-scrape refreshes for items not recently repurchased). Reuses the same dedicated household Telegram bot as Check-In/Budget Alert \u2014 send it a photo of a receipt, it extracts every line item via vision LLM and writes them straight into Catalog + PriceLog with confidence: receipt, no 24-48h staging hold, since a receipt is a real observed purchase (ground truth), not an estimate.\n\nSame structured-JSON-only extraction discipline as the Price Refresh Agent (CLAUDE.md \u00a75, 'never free text'). New items (never before in Catalog) are created via appendOrUpdate rather than the Price Refresh Agent's plain update, since a receipt can introduce a first-time item.\n\nSTATUS: built 2026-08-09, not yet wired with real credentials or live-tested \u2014 needs the same live-application pass as every other agent in this project (Telegram bot credential, Google Sheets credential, Anthropic credential, real spreadsheet ID).",
+        "height": 480,
+        "width": 460
+      },
+      "id": "note-1",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-1400, -420]
+    },
+    {
+      "parameters": {
+        "updates": ["message"]
+      },
+      "id": "telegram-trigger",
+      "name": "Listen for Receipt Photo",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [-1400, 100],
+      "notes": "Fires on every message to the bot, from anyone (same shape as the Check-In Reply Listener) \u2014 the next node filters to the household chat, the one after that filters to photo messages only, so this bot can keep handling check-in text replies and receipt photos on the same trigger.",
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID",
+          "name": "Household Ledger Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.message.chat.id }}",
+              "rightValue": "1662316637",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "if-correct-chat",
+      "name": "From Household Chat?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-1180, 100]
+    },
+    {
+      "parameters": {},
+      "id": "noop-wrong-chat",
+      "name": "Ignore - Wrong Chat",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [-960, 260]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "leftValue": "={{ Array.isArray($json.message.photo) && $json.message.photo.length > 0 }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "if-has-photo",
+      "name": "Has Photo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-960, 20]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.message.chat.id }}",
+        "operation": "sendMessage",
+        "text": "Send a photo of your receipt and I'll log the prices \u2014 the whole receipt in one shot is fine, no need to crop per item."
+      },
+      "id": "telegram-nudge-no-photo",
+      "name": "Nudge - No Photo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [-740, 260],
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID", "name": "Household Ledger Bot" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Telegram sends the same photo at several resolutions in message.photo, sorted smallest to\n// largest \u2014 take the last one (highest resolution) for the clearest read on small receipt print.\nconst photos = $json.message.photo;\nconst largest = photos[photos.length - 1];\nreturn [{ json: { chatId: $json.message.chat.id, fileId: largest.file_id } }];"
+      },
+      "id": "code-pick-largest-photo",
+      "name": "Pick Largest Photo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-740, 20]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.fileId }}"
+      },
+      "id": "telegram-download-photo",
+      "name": "Download Receipt Photo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [-520, 20],
+      "notes": "Downloads the actual image bytes as binary (n8n's Telegram node resolves file_id \u2192 file_path \u2192 download internally, so the bot token never needs to be handled directly in this workflow). Binary lands on the default 'data' property \u2014 verify this live; if n8n uses a different default binary property name for this node/version, update the base64 reference in 'Extract Receipt via LLM' accordingly.",
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID", "name": "Household Ledger Bot" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"model\": \"claude-sonnet-5\",\n  \"max_tokens\": 2000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"image\",\n        \"source\": { \"type\": \"base64\", \"media_type\": \"image/jpeg\", \"data\": $binary.data.data }\n      },\n      {\n        \"type\": \"text\",\n        \"text\": \"This is a photo of a grocery/household store receipt. Extract every line item you can read. Respond with ONLY a JSON object, no prose, no markdown fences: {\\\"store\\\": string, \\\"date\\\": string (YYYY-MM-DD, your best reading of the receipt date), \\\"items\\\": [{\\\"item\\\": string (product name as printed, cleaned up if obviously abbreviated), \\\"price\\\": number (this line's actual paid price), \\\"category\\\": string (one of: Produce, Dairy, Meat, Prepared, Seafood, Pantry, Frozen, Beverages, Snacks, Household), \\\"size\\\": string|null (pack size/weight ONLY if actually printed on the receipt \u2014 do not guess or estimate one), \\\"unit_label\\\": string|null (e.g. \\\"$/lb\\\", \\\"$/ct\\\" \u2014 only if size is non-null and a unit price is derivable)}]}. If any field for an item is genuinely unreadable or absent from the receipt, use null for that field rather than guessing \u2014 per this project's convention, an uncertain value must never be silently invented.\"\n      }\n    ]\n  }]\n} }}",
+        "options": {}
+      },
+      "id": "http-extract-receipt",
+      "name": "Extract Receipt via LLM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-300, 20],
+      "notes": "Structured-JSON-only extraction, same discipline as the Price Refresh Agent's 'Extract Price via LLM' (CLAUDE.md \u00a75). Vision content block references the downloaded photo's base64 binary directly \u2014 same anthropic-version header requirement already confirmed live 2026-07-31 on the Price Refresh Agent.",
+      "credentials": {
+        "httpHeaderAuth": { "id": "lTKsfwWFUX0Yh2iJ", "name": "Antrhopic API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validates the LLM's extraction before any of it is trusted \u2014 never a bare\n// extract-and-trust path, same rule as the Price Refresh Agent's Validate Extraction node.\nlet parsed;\ntry {\n  const raw = $input.first().json.content?.[0]?.text ?? '';\n  parsed = JSON.parse(raw);\n} catch (e) {\n  return [{ json: { valid: false, reason: 'unparseable JSON from extraction' } }];\n}\n\nconst storeOk = typeof parsed.store === 'string' && parsed.store.length > 0;\nconst itemsOk = Array.isArray(parsed.items) && parsed.items.length > 0 &&\n  parsed.items.every((i) => typeof i.item === 'string' && i.item.length > 0 && typeof i.price === 'number' && i.price > 0);\n\nif (!storeOk || !itemsOk) {\n  return [{ json: { valid: false, reason: 'missing/invalid required field', raw: parsed } }];\n}\n\nconst date = (typeof parsed.date === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(parsed.date))\n  ? parsed.date\n  : $now.toFormat('yyyy-MM-dd');\n\nreturn [{ json: { valid: true, store: parsed.store, date, items: parsed.items } }];"
+      },
+      "id": "code-validate-extraction",
+      "name": "Validate Extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-80, 20]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            { "leftValue": "={{ $json.valid }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }
+          ]
+        }
+      },
+      "id": "if-extraction-valid",
+      "name": "Extraction Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [140, 20]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Pick Largest Photo').first().json.chatId }}",
+        "operation": "sendMessage",
+        "text": "Couldn't read that receipt clearly \u2014 could you try again with a flatter, better-lit photo? Cropping out anything but the item lines and totals can help too."
+      },
+      "id": "telegram-extraction-failed",
+      "name": "Log Extraction Failure",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [360, 180],
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID", "name": "Household Ledger Bot" }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      },
+      "id": "split-items",
+      "name": "Split Items",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [360, -100],
+      "notes": "One output item per receipt line, so each can be upserted into Catalog and appended to PriceLog independently below."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flattens one split-out item back into a single row shape carrying the receipt-level\n// store/date alongside its own item/price/category/size/unit_label.\nconst receipt = $('Validate Extraction').first().json;\nconst item = $json;\nreturn [{ json: {\n  item: item.item,\n  category: item.category || 'Household',\n  store: receipt.store,\n  price: item.price,\n  size: item.size || '',\n  unit_label: item.unit_label || '',\n  date: receipt.date\n} }];"
+      },
+      "id": "code-flatten-item",
+      "name": "Flatten Item + Receipt Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [580, -100]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": { "__rl": true, "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Catalog", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $json.item }}",
+            "category": "={{ $json.category }}",
+            "store": "={{ $json.store }}",
+            "price": "={{ $json.price }}",
+            "size": "={{ $json.size }}",
+            "unit_label": "={{ $json.unit_label }}",
+            "last_updated": "={{ $json.date }}",
+            "confidence": "receipt"
+          },
+          "matchingColumns": ["item", "store"],
+          "schema": [
+            { "id": "item", "displayName": "item", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "category", "displayName": "category", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "store", "displayName": "store", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "price", "displayName": "price", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "unit_price", "displayName": "unit_price", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "size", "displayName": "size", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "unit_label", "displayName": "unit_label", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "last_updated", "displayName": "last_updated", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "confidence", "displayName": "confidence", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "product_url", "displayName": "product_url", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "row_number", "displayName": "row_number", "required": false, "defaultMatch": false, "display": true, "type": "number", "canBeUsedToMatch": true, "readOnly": true }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "sheets-upsert-catalog",
+      "name": "Upsert Item into Catalog",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [800, -180],
+      "notes": "appendOrUpdate (not the Price Refresh Agent's plain update) since a receipt can introduce a first-time item never before in Catalog \u2014 matched on item+store, same compound key the Price Refresh Agent uses. unit_price is deliberately left blank here rather than computed, since a receipt-printed size alone isn't enough to safely derive it without risking the exact kind of unverified cross-store comparison CLAUDE.md's caution-icon convention exists to prevent \u2014 leave that to manual entry or a future pass.",
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "zz9INbfV79dYEmQl", "name": "Google Sheets account" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "PriceLog", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $json.item }}",
+            "store": "={{ $json.store }}",
+            "price": "={{ $json.price }}",
+            "date": "={{ $json.date }}",
+            "status": "receipt",
+            "scraped_at": "={{ $now.toFormat('yyyy-MM-dd HH:mm') }}"
+          },
+          "matchingColumns": ["item"],
+          "schema": [
+            { "id": "item", "displayName": "item", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "store", "displayName": "store", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "price", "displayName": "price", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "date", "displayName": "date", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "status", "displayName": "status", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "scraped_at", "displayName": "scraped_at", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "sheets-append-pricelog",
+      "name": "Append to PriceLog",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [800, 20],
+      "notes": "Always a plain append \u2014 PriceLog is append-only history (schema doc), never matched/overwritten. status: receipt distinguishes these ground-truth rows from the Price Refresh Agent's pending/promoted scrape rows at a glance.",
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "zz9INbfV79dYEmQl", "name": "Google Sheets account" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Runs once for all split items (named reference back to Validate Extraction, not the\n// split branch, so this isn't affected by however many rows the receipt had).\nconst receipt = $('Validate Extraction').first().json;\nconst lines = receipt.items.map((i) => {\n  const flag = (!i.size) ? ' \\u26a0\\ufe0f no size printed' : '';\n  return `\\u2022 ${i.item} \\u2014 $${i.price.toFixed(2)}${flag}`;\n}).join('\\n');\nconst total = receipt.items.reduce((sum, i) => sum + i.price, 0);\nconst text = `Logged ${receipt.items.length} item(s) from ${receipt.store} (${receipt.date}), total $${total.toFixed(2)}:\\n\\n${lines}`;\nreturn [{ json: { chatId: $('Pick Largest Photo').first().json.chatId, text } }];"
+      },
+      "id": "code-format-confirmation",
+      "name": "Format Confirmation Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 20],
+      "notes": "alwaysOutputData not needed here since Validate Extraction already guaranteed items.length > 0 before this branch was ever reached."
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "operation": "sendMessage",
+        "text": "={{ $json.text }}"
+      },
+      "id": "telegram-send-confirmation",
+      "name": "Send Confirmation",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1240, 20],
+      "notes": "Set On Error to Continue once wired live, same safety pattern used on every other Telegram send in this project (Send Finalize Summary etc.) so a Telegram hiccup can never take down the ingestion itself \u2014 the sheet writes above have already succeeded by this point regardless.",
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID", "name": "Household Ledger Bot" }
+      }
+    }
+  ],
+  "connections": {
+    "Listen for Receipt Photo": { "main": [[{ "node": "From Household Chat?", "type": "main", "index": 0 }]] },
+    "From Household Chat?": {
+      "main": [
+        [{ "node": "Has Photo?", "type": "main", "index": 0 }],
+        [{ "node": "Ignore - Wrong Chat", "type": "main", "index": 0 }]
+      ]
+    },
+    "Has Photo?": {
+      "main": [
+        [{ "node": "Pick Largest Photo", "type": "main", "index": 0 }],
+        [{ "node": "Nudge - No Photo", "type": "main", "index": 0 }]
+      ]
+    },
+    "Pick Largest Photo": { "main": [[{ "node": "Download Receipt Photo", "type": "main", "index": 0 }]] },
+    "Download Receipt Photo": { "main": [[{ "node": "Extract Receipt via LLM", "type": "main", "index": 0 }]] },
+    "Extract Receipt via LLM": { "main": [[{ "node": "Validate Extraction", "type": "main", "index": 0 }]] },
+    "Validate Extraction": { "main": [[{ "node": "Extraction Valid?", "type": "main", "index": 0 }]] },
+    "Extraction Valid?": {
+      "main": [
+        [{ "node": "Split Items", "type": "main", "index": 0 }],
+        [{ "node": "Log Extraction Failure", "type": "main", "index": 0 }]
+      ]
+    },
+    "Split Items": { "main": [[{ "node": "Flatten Item + Receipt Fields", "type": "main", "index": 0 }]] },
+    "Flatten Item + Receipt Fields": {
+      "main": [
+        [
+          { "node": "Upsert Item into Catalog", "type": "main", "index": 0 },
+          { "node": "Append to PriceLog", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Upsert Item into Catalog": { "main": [[{ "node": "Format Confirmation Message", "type": "main", "index": 0 }]] },
+    "Format Confirmation Message": { "main": [[{ "node": "Send Confirmation", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "active": false,
+  "triggerCount": 1,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
