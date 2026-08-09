@@ -180,5 +180,13 @@ Since Graham built most of the wiring live already, next step is applying these 
 
 **Needs a one-time manual cleanup, separate from the code fix**: the stray blank row 2 itself is still sitting in the live `ShoppingList` sheet right now — go delete it directly in Google Sheets once, since the code fix only prevents this from causing problems *going forward*, it doesn't retroactively clean up what's already there. Also worth a quick look at whether `ShoppingList`'s header row has stray extra columns beyond `added_date` (column G) — the raw row data read back for that blank row included `budget`/`CheckIn_Status`/`CheckIn_ResumeURL`/`home_address` fields, which are `Settings`-tab columns, not `ShoppingList` ones. That's circumstantial, not confirmed, but worth eyeballing the actual header row directly.
 
+**Confirmed live 2026-08-09: Clear All fully fixed** (the row_number-based count correctly sweeps the stray blank row now). But `LastSavedList` was still never getting written to — traced the finalize-snapshot chain node by node in a real execution and found three more distinct bugs stacked at the very end of it:
+
+1. **My bug**: `Split List for Snapshot` used `$now.format('yyyy-MM-dd')` inside a Code node — errored with `$now.format is not a function`. Repeats the exact `$today`-vs-Luxon lesson from earlier in this project, just with `$now` this time: **inside a Code node** `$now` is a raw Luxon object needing `.toFormat(...)`; the friendlier `.format()` alias only exists in n8n's `{{ }}` expression fields (which is why the identical pattern has always worked fine on `Upsert List Row`, since that's an expression field, not a Code node). **Fixed in the repo.**
+2. **`Snapshot to LastSavedList`'s column mapping was shifted by one field** — `category` was mapped to `{{ $json.item }}` and `store` to `{{ $json.category }}`, each pulling from the field before its own. Corrected live to `category` → `{{ $json.category }}`, `store` → `{{ $json.store }}`.
+3. **`Snapshot to LastSavedList` also showed "Column names were updated after the node's setup"** — n8n's cached column schema was stale against the live `LastSavedList` header. Fixed live by refreshing the column list and reconfirming the mapping.
+
+Not yet reverified end-to-end after this third round of fixes on this feature — same live-application, real-test loop as everything else tonight.
+
 ---
 *Add new items here as they come up, and check them off (or link a GitHub issue) as they're resolved — this keeps the doc useful instead of stale.*
