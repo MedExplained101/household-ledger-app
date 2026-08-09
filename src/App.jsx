@@ -510,8 +510,15 @@ export default function HouseholdLedger() {
               <RefreshCw size={14} className="animate-spin" /> Loading your list…
             </div>
           ) : list.length === 0 ? (
-            <div className="border border-dashed border-[#3D5178] rounded-sm py-16 text-center text-[#93A3C4]">
-              Add items from the catalog to start this {cadence.toLowerCase()}&apos;s list.
+            <div className="border border-dashed border-[#3D5178] rounded-sm py-16 text-center text-[#93A3C4] flex flex-col items-center gap-3">
+              <span>Add items from the catalog to start this {cadence.toLowerCase()}&apos;s list.</span>
+              <button
+                onClick={loadLastList}
+                disabled={syncing}
+                className="text-xs uppercase tracking-widest text-[#93A3C4] hover:text-[#F2F0E6] disabled:opacity-50"
+              >
+                Load last list
+              </button>
             </div>
           ) : (
             <div className="border border-[#F2F0E6] bg-[#16264A]">
