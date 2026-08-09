@@ -91,7 +91,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const results = [];\nfor (let i = 0; i < $input.all().length; i++) {\nconst buffer = await this.helpers.getBinaryDataBuffer(i, 'data');\nresults.push({ json: { ...$input.all()[i].json, imageBase64: buffer.toString('base64') }, binary: $input.all()[i].binary });\n}\nreturn results;"
+        "jsCode": "const results = [];\nconst source = $('Pick Largest Photo').first().json;\nfor (let i = 0; i < $input.all().length; i++) {\n  const buffer = await this.helpers.getBinaryDataBuffer(i, 'data');\n  results.push({ json: { ...$input.all()[i].json, imageBase64: buffer.toString('base64'), mediaType: source.mediaType, anthropicType: source.anthropicType }, binary: $input.all()[i].binary });\n}\nreturn results;"
       },
       "id": "code-encode-base64",
       "name": "Encode Photo as Base64",
