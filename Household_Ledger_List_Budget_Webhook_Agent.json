@@ -544,11 +544,12 @@
           "name": "Google Sheets account"
         }
       },
-      "notes": "Reads current row count before clearing -- needed to know how many rows to delete, since we're deliberately avoiding the Google Sheets node's separate 'Clear' operation (its exact parameter shape wasn't verified live, unlike Delete Rows or Columns, which was already fixed and confirmed working tonight for the Remove action). Added 2026-08-08 for the Clear All feature."
+      "notes": "Reads current row count before clearing -- needed to know how many rows to delete, since we're deliberately avoiding the Google Sheets node's separate 'Clear' operation (its exact parameter shape wasn't verified live, unlike Delete Rows or Columns, which was already fixed and confirmed working tonight for the Remove action). Added 2026-08-08 for the Clear All feature. UPDATED 2026-08-09: added alwaysOutputData -- without it, calling Clear on an already-empty ShoppingList made this node return 0 items, which halts the whole branch right here (n8n's default 'stop when no output data' behavior) rather than reaching Get Current List/Get Settings. Same bug class discovered live via the Recall branch.",
+      "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "// Counts current ShoppingList data rows before clearing. Feeds Has Rows to Clear?\n// and the fixed Start Row Number (always 2, the first data row -- see the note on\n// Clear ShoppingList Rows for why this is a real number, not row_number - 1).\nreturn [{ json: { count: $input.all().length } }];"
+        "jsCode": "// Filters out the alwaysOutputData placeholder (no `item` field) so an empty\n// sheet correctly counts as 0 real rows, not 1.\nconst items = $input.all().filter((i) => i.json && i.json.item);\nreturn [{ json: { count: items.length } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -724,13 +725,14 @@
         720,
         900
       ],
-      "notes": "Unfiltered read of LastSavedList -- reads whatever the most recent finalize snapshotted there. If nothing's ever been finalized, this returns 0 rows and Recall to ShoppingList below just no-ops. Added 2026-08-09 for the Load Last List feature.",
+      "notes": "UPDATED 2026-08-09: added alwaysOutputData -- an empty LastSavedList (nothing finalized yet) was returning 0 items and halting this branch before Recall to ShoppingList ever ran, which is exactly the silent-death symptom seen live 2026-08-09. New 'Has Last Saved List?' gate right after this node treats the resulting placeholder as 'nothing to recall' instead of blindly upserting a blank row.",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "zz9INbfV79dYEmQl",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -841,7 +843,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        940,
+        1160,
         900
       ],
       "alwaysOutputData": true,
@@ -876,17 +878,18 @@
         820
       ],
       "onError": "continueRegularOutput",
-      "notes": "Fire-and-forget snapshot branch, parallel to Format Finalize Message -- must never block Return List + Totals, so onError is set to Continue on every node in this chain (same lesson as Check Budget Alert's original outage). Reads current row count in LastSavedList before clearing it, same clear+append pattern as Clear ShoppingList Rows. Added 2026-08-09 for Load Last List.",
+      "notes": "UPDATED 2026-08-09: alwaysOutputData is required here -- LastSavedList starts out empty, so without this flag this node returned 0 items on every finalize so far, halting this entire branch before Split List for Snapshot/Snapshot to LastSavedList ever ran. Confirmed live: LastSavedList was still empty after two successful Save List taps because of this exact gap.",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "zz9INbfV79dYEmQl",
           "name": "Google Sheets account"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "return [{ json: { count: $input.all().length } }];"
+        "jsCode": "// Filters out the alwaysOutputData placeholder (no `item` field) so an empty\n// sheet correctly counts as 0 real rows, not 1.\nconst items = $input.all().filter((i) => i.json && i.json.item);\nreturn [{ json: { count: items.length } }];"
       },
       "id": "code-count-lastsaved-rows-to-clear",
       "name": "Count LastSavedList Rows to Clear",
@@ -1097,6 +1100,38 @@
           "name": "Google Sheets account"
         }
       }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ String($json.item || \"\") }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-has-last-saved-list",
+      "name": "Has Last Saved List?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        940,
+        900
+      ],
+      "notes": "Guards against Recall to ShoppingList upserting a blank/garbage row when Get Last Saved List Rows produced only the alwaysOutputData placeholder (i.e. nothing has ever been finalized yet). Same defensive shape as Found Row to Remove?. Added 2026-08-09."
     }
   ],
   "connections": {
@@ -1370,7 +1405,7 @@
       "main": [
         [
           {
-            "node": "Recall to ShoppingList",
+            "node": "Has Last Saved List?",
             "type": "main",
             "index": 0
           }
@@ -1449,6 +1484,29 @@
         [
           {
             "node": "Snapshot to LastSavedList",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Last Saved List?": {
+      "main": [
+        [
+          {
+            "node": "Recall to ShoppingList",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Current List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Settings",
             "type": "main",
             "index": 0
           }
