@@ -968,7 +968,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Rebuilds the finalized list as one item per row for appending to LastSavedList.\n// Named reference back to Is Finalize? (not bare $json) because this node sits\n// downstream of the Clear LastSavedList Rows/count sub-chain, which has replaced\n// $json with row-count data by this point -- same wrong-payload-level bug class\n// fixed elsewhere in this project.\nconst list = $('Is Finalize?').first().json.list || [];\nconst today = $now.toFormat('yyyy-MM-dd');\nreturn list.map((r) => ({\n  json: {\n    item: r.item,\n    category: r.category,\n    store: r.store,\n    price: r.price,\n    qty: r.qty,\n    cadence: r.cadence,\n    added_date: today\n  }\n}));"
+        "jsCode": "// Rebuilds the finalized list as one item per row for appending to LastSavedList.\n// Named reference back to Is Finalize? (not bare $json) because this node sits\n// downstream of the Clear LastSavedList Rows/count sub-chain, which has replaced\n// $json with row-count data by this point -- same wrong-payload-level bug class\n// fixed elsewhere in this project.\nconst list = ($('Is Finalize?').first().json.list || []).filter((r) => r && r.item);\nconst today = $now.toFormat('yyyy-MM-dd');\nreturn list.map((r) => ({\n  json: {\n    item: r.item,\n    category: r.category,\n    store: r.store,\n    price: r.price,\n    qty: r.qty,\n    cadence: r.cadence,\n    added_date: today\n  }\n}));"
       },
       "id": "code-split-list-for-snapshot",
       "name": "Split List for Snapshot",
