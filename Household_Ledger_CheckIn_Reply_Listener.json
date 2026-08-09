@@ -78,7 +78,7 @@
           "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
           "conditions": [
             {
-              "leftValue": "={{ Array.isArray($json.message.photo) && $json.message.photo.length > 0 }}",
+              "leftValue": "={{ (Array.isArray($json.message.photo) && $json.message.photo.length > 0) || ($json.message.document && $json.message.document.mime_type === 'application/pdf') }}",
               "rightValue": true,
               "operator": { "type": "boolean", "operation": "equals" }
             }

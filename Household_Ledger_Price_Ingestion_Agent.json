@@ -34,7 +34,7 @@
           "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
           "conditions": [
             {
-              "leftValue": "={{ Array.isArray($json.message.photo) && $json.message.photo.length > 0 }}",
+              "leftValue": "={{ (Array.isArray($json.message.photo) && $json.message.photo.length > 0) || ($json.message.document && $json.message.document.mime_type === 'application/pdf') }}",
               "rightValue": true,
               "operator": { "type": "boolean", "operation": "equals" }
             }
@@ -64,7 +64,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Telegram sends the same photo at several resolutions in message.photo, sorted smallest to\n// largest \u2014 take the last one (highest resolution) for the clearest read on small receipt print.\nconst photos = $json.message.photo;\nconst largest = photos[photos.length - 1];\nreturn [{ json: { chatId: $json.message.chat.id, fileId: largest.file_id } }];"
+        "jsCode": "// Telegram sends the same photo at several resolutions in message.photo, sorted smallest to\n// largest -- take the last one (highest resolution) for the clearest read on small receipt print.\n// PDFs arrive as message.document instead -- no resolution choice, just use it directly.\nif (Array.isArray($json.message.photo) && $json.message.photo.length > 0) {\n  const photos = $json.message.photo;\n  const largest = photos[photos.length - 1];\n  return [{ json: { chatId: $json.message.chat.id, fileId: largest.file_id, mediaType: 'image/jpeg', anthropicType: 'image' } }];\n}\nconst doc = $json.message.document;\nreturn [{ json: { chatId: $json.message.chat.id, fileId: doc.file_id, mediaType: doc.mime_type, anthropicType: 'document' } }];"
       },
       "id": "code-pick-largest-photo",
       "name": "Pick Largest Photo",
@@ -114,7 +114,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ {\n  \"model\": \"claude-sonnet-5\",\n  \"max_tokens\": 8000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": \"image\",\n        \"source\": { \"type\": \"base64\", \"media_type\": \"image/jpeg\", \"data\": $json.imageBase64 }\n      },\n      {\n        \"type\": \"text\",\n        \"text\": \"This is a photo of a grocery/household store receipt. Extract every line item you can read. Respond with ONLY a JSON object, no prose, no markdown fences: {\\\"store\\\": string, \\\"date\\\": string (YYYY-MM-DD, your best reading of the receipt date), \\\"items\\\": [{\\\"item\\\": string (product name as printed, cleaned up if obviously abbreviated), \\\"price\\\": number (this line's actual paid price), \\\"category\\\": string (one of: Produce, Dairy, Meat, Prepared, Seafood, Pantry, Frozen, Beverages, Snacks, Household), \\\"size\\\": string|null (pack size/weight ONLY if actually printed on the receipt \u2014 do not guess or estimate one), \\\"unit_label\\\": string|null (e.g. \\\"$/lb\\\", \\\"$/ct\\\" \u2014 only if size is non-null and a unit price is derivable)}]}. If any field for an item is genuinely unreadable or absent from the receipt, use null for that field rather than guessing \u2014 per this project's convention, an uncertain value must never be silently invented.\"\n      }\n    ]\n  }]\n} }}",
+        "jsonBody": "={{ {\n  \"model\": \"claude-sonnet-5\",\n  \"max_tokens\": 8000,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": [\n      {\n        \"type\": $json.anthropicType,\n        \"source\": { \"type\": \"base64\", \"media_type\": $json.mediaType, \"data\": $json.imageBase64 }\n      },\n      {\n        \"type\": \"text\",\n        \"text\": \"This is a photo of a grocery/household store receipt. Extract every line item you can read. Respond with ONLY a JSON object, no prose, no markdown fences: {\\\"store\\\": string, \\\"date\\\": string (YYYY-MM-DD, your best reading of the receipt date), \\\"items\\\": [{\\\"item\\\": string (product name as printed, cleaned up if obviously abbreviated), \\\"price\\\": number (this line's actual paid price), \\\"category\\\": string (one of: Produce, Dairy, Meat, Prepared, Seafood, Pantry, Frozen, Beverages, Snacks, Household), \\\"size\\\": string|null (pack size/weight ONLY if actually printed on the receipt \u2014 do not guess or estimate one), \\\"unit_label\\\": string|null (e.g. \\\"$/lb\\\", \\\"$/ct\\\" \u2014 only if size is non-null and a unit price is derivable)}]}. If any field for an item is genuinely unreadable or absent from the receipt, use null for that field rather than guessing \u2014 per this project's convention, an uncertain value must never be silently invented.\"\n      }\n    ]\n  }]\n} }}",
         "options": {}
       },
       "id": "http-extract-receipt",
