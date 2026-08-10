@@ -394,6 +394,18 @@ export default function HouseholdLedger() {
 
   const recurring = CATALOG.filter((i) => /recurring/.test(i.note || ""));
 
+  const syncStatusContent = syncing ? (
+    <>
+      <RefreshCw size={12} className="animate-spin" /> Syncing
+    </>
+  ) : error ? (
+    <>
+      <WifiOff size={12} className="text-[#E8756A]" /> Offline
+    </>
+  ) : (
+    "Synced"
+  );
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#0F1E3D] text-[#F2F0E6] font-serif">
       <style>{`
@@ -402,8 +414,8 @@ export default function HouseholdLedger() {
         .dashed-top { background-image: repeating-linear-gradient(90deg, #33456B 0, #33456B 6px, transparent 6px, transparent 12px); height: 2px; }
       `}</style>
 
-      <header className="border-b-2 border-[#F2F0E6] px-6 py-5 grid grid-cols-[1fr_auto_1fr] items-center max-w-5xl mx-auto">
-        <div>
+      <header className="border-b-2 border-[#F2F0E6] px-4 sm:px-6 py-4 sm:py-5 flex flex-col gap-3 md:grid md:grid-cols-[1fr_auto_1fr] md:items-center md:gap-0 max-w-5xl mx-auto">
+        <div className="order-2 md:order-1 flex items-center justify-between md:block">
           <input
             ref={fileInputRef}
             type="file"
@@ -426,8 +438,11 @@ export default function HouseholdLedger() {
               </>
             )}
           </button>
+          <div className="md:hidden text-xs uppercase tracking-widest text-[#93A3C4] font-mono-tab flex items-center gap-1.5">
+            {syncStatusContent}
+          </div>
         </div>
-        <div className="text-center">
+        <div className="order-1 md:order-2 text-center">
           <h1 className="text-3xl tracking-tight" style={{ letterSpacing: "-0.01em" }}>
             Household Ledger
           </h1>
@@ -435,18 +450,8 @@ export default function HouseholdLedger() {
             Alpharetta / Milton, GA · prices from your last Costco &amp; Walmart runs
           </p>
         </div>
-        <div className="text-right text-xs uppercase tracking-widest text-[#93A3C4] font-mono-tab flex items-center gap-1.5 justify-end">
-          {syncing ? (
-            <>
-              <RefreshCw size={12} className="animate-spin" /> Syncing
-            </>
-          ) : error ? (
-            <>
-              <WifiOff size={12} className="text-[#E8756A]" /> Offline
-            </>
-          ) : (
-            "Synced"
-          )}
+        <div className="hidden md:flex order-3 text-right text-xs uppercase tracking-widest text-[#93A3C4] font-mono-tab items-center gap-1.5 justify-end">
+          {syncStatusContent}
         </div>
       </header>
 
