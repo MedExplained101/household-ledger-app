@@ -414,7 +414,7 @@ export default function HouseholdLedger() {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={scanning}
-            className="text-xs uppercase tracking-widest text-[#93A3C4] hover:text-[#F2F0E6] disabled:opacity-50 flex items-center gap-1.5"
+            className="text-xs uppercase tracking-widest text-[#93A3C4] hover:text-[#F2F0E6] disabled:opacity-50 flex items-center gap-1.5 border border-[#3D5178] rounded-sm bg-[#16264A] hover:bg-[#1B2E52] px-3 py-1.5"
           >
             {scanning ? (
               <>
@@ -422,7 +422,7 @@ export default function HouseholdLedger() {
               </>
             ) : (
               <>
-                <Camera size={12} /> Scan receipt
+                <Camera size={12} /> Scan/Upload Receipt
               </>
             )}
           </button>
