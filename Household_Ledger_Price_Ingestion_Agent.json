@@ -129,7 +129,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Validates the LLM's extraction before any of it is trusted \u2014 never a bare\n// extract-and-trust path, same rule as the Price Refresh Agent's Validate Extraction node.\nlet parsed;\ntry {\n  const raw = $input.first().json.content?.find((b) => b.type === 'text')?.text ?? '';\n  parsed = JSON.parse(raw);\n} catch (e) {\n  return [{ json: { valid: false, reason: 'unparseable JSON from extraction' } }];\n}\n\nconst storeOk = typeof parsed.store === 'string' && parsed.store.length > 0;\nconst rawItems = Array.isArray(parsed.items) ? parsed.items : [];\nconst validItems = rawItems.filter((i) => typeof i.item === 'string' && i.item.length > 0 && typeof i.price === 'number' && i.price > 0);\nconst skippedCount = rawItems.length - validItems.length;\n\nif (!storeOk || validItems.length === 0) {\n  return [{ json: { valid: false, reason: 'missing/invalid required field', raw: parsed } }];\n}\n\nconst date = (typeof parsed.date === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(parsed.date))\n  ? parsed.date\n  : $now.toFormat('yyyy-MM-dd');\n\nreturn [{ json: { valid: true, store: parsed.store, date, items: validItems, skippedCount } }];"
+        "jsCode": "// Validates the LLM's extraction before any of it is trusted \u2014 never a bare\n// extract-and-trust path, same rule as the Price Refresh Agent's Validate Extraction node.\nlet source = 'telegram';\ntry { $('Web Upload Trigger').first(); source = 'web'; } catch (e) {}\n\nlet parsed;\ntry {\n  const raw = $input.first().json.content?.find((b) => b.type === 'text')?.text ?? '';\n  parsed = JSON.parse(raw);\n} catch (e) {\n  return [{ json: { valid: false, reason: 'unparseable JSON from extraction', source } }];\n}\n\nconst storeOk = typeof parsed.store === 'string' && parsed.store.length > 0;\nconst rawItems = Array.isArray(parsed.items) ? parsed.items : [];\nconst validItems = rawItems.filter((i) => typeof i.item === 'string' && i.item.length > 0 && typeof i.price === 'number' && i.price > 0);\nconst skippedCount = rawItems.length - validItems.length;\n\nif (!storeOk || validItems.length === 0) {\n  return [{ json: { valid: false, reason: 'missing/invalid required field', raw: parsed, source } }];\n}\n\nconst date = (typeof parsed.date === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(parsed.date))\n  ? parsed.date\n  : $now.toFormat('yyyy-MM-dd');\n\nreturn [{ json: { valid: true, store: parsed.store, date, items: validItems, skippedCount, source } }];"
       },
       "id": "code-validate-extraction",
       "name": "Validate Extraction",
@@ -163,6 +163,8 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [360, 180],
+      "onError": "continueRegularOutput",
+      "notes": "On Error set to Continue live 2026-08-09 -- once web-upload triggered runs started sharing this false-branch, an unhandled Telegram error here (chatId is undefined for web-triggered runs, since Pick Largest Photo never ran) would otherwise abort the whole execution, including the parallel Format Web Error Response branch.",
       "credentials": {
         "telegramApi": { "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID", "name": "Household Ledger Bot" }
       }
@@ -296,10 +298,83 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [1240, 20],
-      "notes": "Set On Error to Continue once wired live, same safety pattern used on every other Telegram send in this project (Send Finalize Summary etc.) so a Telegram hiccup can never take down the ingestion itself \u2014 the sheet writes above have already succeeded by this point regardless.",
+      "onError": "continueRegularOutput",
+      "notes": "On Error set to Continue live, same safety pattern used on every other Telegram send in this project (Send Finalize Summary etc.) so a Telegram hiccup can never take down the ingestion itself \u2014 the sheet writes above have already succeeded by this point regardless. Also required now that web-uploaded receipts share this branch: chatId is undefined for web-triggered runs (Pick Largest Photo never ran), which would otherwise abort the whole execution.",
       "credentials": {
         "telegramApi": { "id": "REPLACE_WITH_TELEGRAM_CREDENTIAL_ID", "name": "Household Ledger Bot" }
       }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "household-ledger-ingest-receipt",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-web-upload-trigger",
+      "name": "Web Upload Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-1400, 500],
+      "webhookId": "household-ledger-ingest-receipt",
+      "notes": "Second entry point, added 2026-08-09 for direct in-app receipt upload (camera or file picker) -- lets the PWA POST a receipt straight to this workflow instead of going through Telegram. No auth on this endpoint (same trust model as the List/Budget webhook, URL obscurity only). Expected body: { imageBase64: string, mediaType: string }. Response mode is 'Using Respond to Webhook Node' so the app gets a synchronous JSON result once the sheet writes are done, not just an immediate ack."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Web-uploaded receipts arrive as raw JSON (the app already has the file as base64\n// client-side, no Telegram file_id/download step needed here).\nconst body = $json.body || $json;\nconst mediaType = body.mediaType;\nconst anthropicType = mediaType === 'application/pdf' ? 'document' : 'image';\nreturn [{ json: { imageBase64: body.imageBase64, mediaType, anthropicType, source: 'web' } }];"
+      },
+      "id": "code-normalize-web-upload",
+      "name": "Normalize Web Upload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1180, 500],
+      "notes": "Feeds directly into Extract Receipt via LLM (fan-in, same target the Telegram path's Encode Photo as Base64 also feeds) -- output shape matches what that node's Encode Photo as Base64 counterpart produces."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds the HTTP error response for web-triggered uploads. Harmless no-op when this\n// run came from Telegram instead -- Respond to Webhook silently ignores it since there's\n// no pending webhook call to answer.\nconst data = $json;\nreturn [{ json: { ok: false, reason: data.reason || 'Could not read this receipt clearly. Try a flatter, better-lit photo.' } }];"
+      },
+      "id": "code-format-web-error-response",
+      "name": "Format Web Error Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [360, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {}
+      },
+      "id": "respond-webhook-error",
+      "name": "Respond to Webhook (Error)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [580, 400],
+      "onError": "continueRegularOutput",
+      "notes": "On Error: Continue -- this node is a no-op when the run came from Telegram (no pending webhook call to respond to)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Runs once for all split items (named reference back to Validate Extraction, same\n// pattern as Format Confirmation Message). Harmless no-op when this run came from\n// Telegram instead -- Respond to Webhook silently ignores it.\nconst receipt = $('Validate Extraction').first().json;\nconst total = receipt.items.reduce((sum, i) => sum + i.price, 0);\nreturn [{ json: {\n  ok: true,\n  store: receipt.store,\n  date: receipt.date,\n  itemsLogged: receipt.items.length,\n  total: Math.round(total * 100) / 100,\n  skippedCount: receipt.skippedCount,\n  items: receipt.items\n} }];"
+      },
+      "id": "code-format-web-response",
+      "name": "Format Web Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 260]
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {}
+      },
+      "id": "respond-webhook-success",
+      "name": "Respond to Webhook (Success)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1240, 260],
+      "onError": "continueRegularOutput",
+      "notes": "On Error: Continue -- this node is a no-op when the run came from Telegram (no pending webhook call to respond to)."
     }
   ],
   "connections": {
@@ -313,14 +388,20 @@
     "Pick Largest Photo": { "main": [[{ "node": "Download Receipt Photo", "type": "main", "index": 0 }]] },
     "Download Receipt Photo": { "main": [[{ "node": "Encode Photo as Base64", "type": "main", "index": 0 }]] },
     "Encode Photo as Base64": { "main": [[{ "node": "Extract Receipt via LLM", "type": "main", "index": 0 }]] },
+    "Web Upload Trigger": { "main": [[{ "node": "Normalize Web Upload", "type": "main", "index": 0 }]] },
+    "Normalize Web Upload": { "main": [[{ "node": "Extract Receipt via LLM", "type": "main", "index": 0 }]] },
     "Extract Receipt via LLM": { "main": [[{ "node": "Validate Extraction", "type": "main", "index": 0 }]] },
     "Validate Extraction": { "main": [[{ "node": "Extraction Valid?", "type": "main", "index": 0 }]] },
     "Extraction Valid?": {
       "main": [
         [{ "node": "Split Items", "type": "main", "index": 0 }],
-        [{ "node": "Log Extraction Failure", "type": "main", "index": 0 }]
+        [
+          { "node": "Log Extraction Failure", "type": "main", "index": 0 },
+          { "node": "Format Web Error Response", "type": "main", "index": 0 }
+        ]
       ]
     },
+    "Format Web Error Response": { "main": [[{ "node": "Respond to Webhook (Error)", "type": "main", "index": 0 }]] },
     "Split Items": { "main": [[{ "node": "Flatten Item + Receipt Fields", "type": "main", "index": 0 }]] },
     "Flatten Item + Receipt Fields": {
       "main": [
@@ -330,8 +411,16 @@
         ]
       ]
     },
-    "Upsert Item into Catalog": { "main": [[{ "node": "Format Confirmation Message", "type": "main", "index": 0 }]] },
-    "Format Confirmation Message": { "main": [[{ "node": "Send Confirmation", "type": "main", "index": 0 }]] }
+    "Upsert Item into Catalog": {
+      "main": [
+        [
+          { "node": "Format Confirmation Message", "type": "main", "index": 0 },
+          { "node": "Format Web Response", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Format Confirmation Message": { "main": [[{ "node": "Send Confirmation", "type": "main", "index": 0 }]] },
+    "Format Web Response": { "main": [[{ "node": "Respond to Webhook (Success)", "type": "main", "index": 0 }]] }
   },
   "settings": {
     "executionOrder": "v1",
@@ -342,7 +431,7 @@
   },
   "pinData": {},
   "active": false,
-  "triggerCount": 1,
+  "triggerCount": 2,
   "meta": {
     "templateCredsSetupCompleted": false
   }

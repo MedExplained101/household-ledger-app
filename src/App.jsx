@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { Plus, Minus, X, ChevronDown, AlertTriangle, Search, RefreshCw, WifiOff } from "lucide-react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { Plus, Minus, X, ChevronDown, AlertTriangle, Search, RefreshCw, WifiOff, Camera } from "lucide-react";
 
 // Your n8n production webhook — the mobile app never touches Google Sheets
 // directly, it POSTs actions here and the workflow reads/writes ShoppingList + Settings.
@@ -8,6 +8,15 @@ import { Plus, Minus, X, ChevronDown, AlertTriangle, Search, RefreshCw, WifiOff 
 const WEBHOOK_URL =
   import.meta.env.VITE_WEBHOOK_URL ||
   "https://medexplained101.app.n8n.cloud/webhook/household-ledger-list";
+
+// Receipt scan/upload endpoint — same trust model as WEBHOOK_URL above (no auth,
+// URL obscurity only). Feeds the same Price Ingestion Agent pipeline that Telegram
+// photo/PDF uploads use, just skipping the Telegram file-download step since the
+// browser already has the file. Confirmation is shown in-app only; it does not
+// also post to the household Telegram chat.
+const INGEST_WEBHOOK_URL =
+  import.meta.env.VITE_INGEST_WEBHOOK_URL ||
+  "https://medexplained101.app.n8n.cloud/webhook/household-ledger-ingest-receipt";
 
 // ---------------------------------------------------------------------------
 // CATALOG — built from parsed Costco + Walmart receipts (Alpharetta / Milton, GA)
@@ -123,6 +132,12 @@ export default function HouseholdLedger() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState(null);
   const [finalized, setFinalized] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const confirmClearTimeout = useRef(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanMessage, setScanMessage] = useState(null);
+  const scanMessageTimeout = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Maps a ShoppingList row from the sheet back into the shape the UI expects,
   // reattaching the matching CATALOG entry so stores/notes/sizeUnknown still work.
@@ -173,6 +188,58 @@ export default function HouseholdLedger() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(confirmClearTimeout.current);
+      clearTimeout(scanMessageTimeout.current);
+    };
+  }, []);
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function scanReceipt(file) {
+    setScanning(true);
+    setScanMessage(null);
+    try {
+      const imageBase64 = await fileToBase64(file);
+      const res = await fetch(INGEST_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64, mediaType: file.type }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        const skippedNote = data.skippedCount
+          ? ` (${data.skippedCount} line${data.skippedCount === 1 ? "" : "s"} skipped — unreadable price)`
+          : "";
+        setScanMessage({
+          type: "success",
+          text: `Logged ${data.itemsLogged} item${data.itemsLogged === 1 ? "" : "s"} from ${data.store}, total $${data.total.toFixed(2)}${skippedNote}.`,
+        });
+      } else {
+        setScanMessage({ type: "error", text: data.reason || "Couldn't read that receipt." });
+      }
+    } catch {
+      setScanMessage({ type: "error", text: "Couldn't reach the server — try again." });
+    } finally {
+      setScanning(false);
+      scanMessageTimeout.current = setTimeout(() => setScanMessage(null), 7000);
+    }
+  }
+
+  function handleFileSelected(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) scanReceipt(file);
+  }
 
   async function addItem(item) {
     const existing = list.find((p) => p.name === item.name);
@@ -266,9 +333,13 @@ export default function HouseholdLedger() {
 
   async function clearAll() {
     if (list.length === 0) return;
-    if (!window.confirm(`Clear all ${list.length} item${list.length === 1 ? "" : "s"} from this ${cadence.toLowerCase()}'s list? This can't be undone.`)) {
+    if (!confirmingClear) {
+      setConfirmingClear(true);
+      confirmClearTimeout.current = setTimeout(() => setConfirmingClear(false), 3000);
       return;
     }
+    clearTimeout(confirmClearTimeout.current);
+    setConfirmingClear(false);
     setSyncing(true);
     setError(null);
     try {
@@ -332,7 +403,30 @@ export default function HouseholdLedger() {
       `}</style>
 
       <header className="border-b-2 border-[#F2F0E6] px-6 py-5 grid grid-cols-[1fr_auto_1fr] items-center max-w-5xl mx-auto">
-        <div />
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,application/pdf"
+            onChange={handleFileSelected}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={scanning}
+            className="text-xs uppercase tracking-widest text-[#93A3C4] hover:text-[#F2F0E6] disabled:opacity-50 flex items-center gap-1.5"
+          >
+            {scanning ? (
+              <>
+                <RefreshCw size={12} className="animate-spin" /> Scanning
+              </>
+            ) : (
+              <>
+                <Camera size={12} /> Scan receipt
+              </>
+            )}
+          </button>
+        </div>
         <div className="text-center">
           <h1 className="text-3xl tracking-tight" style={{ letterSpacing: "-0.01em" }}>
             Household Ledger
@@ -360,6 +454,20 @@ export default function HouseholdLedger() {
         <div className="max-w-5xl mx-auto px-6 pt-4">
           <div className="border border-[#E8756A] bg-[#3D1F1C] text-[#E8756A] text-xs px-3 py-2 rounded-sm">
             {error}
+          </div>
+        </div>
+      )}
+
+      {scanMessage && (
+        <div className="max-w-5xl mx-auto px-6 pt-4">
+          <div
+            className={`border text-xs px-3 py-2 rounded-sm ${
+              scanMessage.type === "success"
+                ? "border-[#6B9E71] bg-[#1B2E1F] text-[#6B9E71]"
+                : "border-[#E8756A] bg-[#3D1F1C] text-[#E8756A]"
+            }`}
+          >
+            {scanMessage.text}
           </div>
         </div>
       )}
@@ -721,9 +829,13 @@ export default function HouseholdLedger() {
                 <button
                   onClick={clearAll}
                   disabled={syncing}
-                  className="text-xs uppercase tracking-widest text-[#93A3C4] hover:text-[#E8756A] disabled:opacity-50"
+                  className={`text-xs uppercase tracking-widest disabled:opacity-50 ${
+                    confirmingClear
+                      ? "text-[#E8756A] font-semibold"
+                      : "text-[#93A3C4] hover:text-[#E8756A]"
+                  }`}
                 >
-                  Clear all
+                  {confirmingClear ? "Confirm clear?" : "Clear all"}
                 </button>
                 <button
                   onClick={loadLastList}
