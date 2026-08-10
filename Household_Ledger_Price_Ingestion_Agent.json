@@ -332,7 +332,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Builds the HTTP error response for web-triggered uploads. Harmless no-op when this\n// run came from Telegram instead -- Respond to Webhook silently ignores it since there's\n// no pending webhook call to answer.\nconst data = $json;\nreturn [{ json: { ok: false, reason: data.reason || 'Could not read this receipt clearly. Try a flatter, better-lit photo.' } }];"
+        "jsCode": "// Builds the HTTP error response for web-triggered uploads. Harmless no-op when this\n// run came from Telegram instead -- Respond to Webhook silently ignores it since there's\n// no pending webhook call to answer. Always shows a friendly message -- the internal\n// reason ('unparseable JSON from extraction' etc.) is for our own debugging, not the user.\nreturn [{ json: { ok: false, reason: \"Couldn't read that receipt clearly. Try a flatter, better-lit photo, or make sure the whole receipt is in frame.\" } }];"
       },
       "id": "code-format-web-error-response",
       "name": "Format Web Error Response",
