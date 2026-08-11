@@ -481,6 +481,37 @@
     },
     {
       "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1168,
+        680
+      ],
+      "id": "sheets-get-stores",
+      "name": "Get Stores",
+      "executeOnce": true,
+      "notes": "Added 2026-08-11 for online-vs-in-store delivery fee pricing (CLAUDE.md open decision #6). Reads the whole Stores tab once per webhook call so Compute Totals can look up each list store's delivery_fee -- same executeOnce pattern as Get Current List/Get Settings, since this sits on the shared response path regardless of which action triggered it.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
         "mode": "combine",
         "combineBy": "combineAll",
         "options": {}
@@ -496,7 +527,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Input 0..N-1: ShoppingList rows, last item: Settings row (merged combineAll puts them sequentially per input branch)\nconst listRows = $('Get Current List').all().map(i => i.json);\nconst settings = $('Get Settings').first().json;\n\nconst total = listRows.reduce((sum, r) => sum + (Number(r.price) || 0) * (Number(r.qty) || 0), 0);\nconst budget = Number(settings.budget) || 0;\n\nreturn [{\n  json: {\n    list: listRows,\n    total: Math.round(total * 100) / 100,\n    budget,\n    remaining: Math.round((budget - total) * 100) / 100,\n    cadence: settings.cadence\n  }\n}];"
+        "jsCode": "// Input 0..N-1: ShoppingList rows, last item: Settings row (merged combineAll puts them sequentially per input branch)\nconst listRows = $('Get Current List').all().map(i => i.json);\nconst settings = $('Get Settings').first().json;\nconst storeRows = $('Get Stores').all().map(i => i.json);\n\nconst total = listRows.reduce((sum, r) => sum + (Number(r.price) || 0) * (Number(r.qty) || 0), 0);\nconst budget = Number(settings.budget) || 0;\n\n// Delivery fees: charged once per distinct store on the list that has a nonzero\n// delivery_fee in the Stores tab -- flat fee only for v1, no free-delivery-above-$X\n// threshold modeling yet (see household-ledger-sheets-schema.md Stores tab note).\nconst storesUsed = [...new Set(listRows.map(r => r.store).filter(Boolean))];\nconst deliveryFees = storesUsed\n  .map(storeName => {\n    const match = storeRows.find(s => s.store === storeName);\n    return { store: storeName, fee: match ? Number(match.delivery_fee) || 0 : 0 };\n  })\n  .filter(d => d.fee > 0);\nconst deliveryTotal = Math.round(deliveryFees.reduce((sum, d) => sum + d.fee, 0) * 100) / 100;\nconst grandTotal = Math.round((total + deliveryTotal) * 100) / 100;\n\nreturn [{\n  json: {\n    list: listRows,\n    total: Math.round(total * 100) / 100,\n    deliveryFees,\n    deliveryTotal,\n    grandTotal,\n    budget,\n    remaining: Math.round((budget - grandTotal) * 100) / 100,\n    cadence: settings.cadence,\n    stores: storeRows\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -671,7 +702,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Builds the Telegram summary text for a finalized (Save List) request.\n// Input is Compute Totals' own output: { list, total, budget, remaining, cadence }.\nconst { list, total, budget, remaining, cadence } = $json;\nconst lines = list\n  .map((r) => `\\u2022 ${r.item} (x${r.qty}) \\u2014 $${(Number(r.price) * Number(r.qty)).toFixed(2)}`)\n  .join('\\n');\nconst budgetLine = remaining >= 0\n  ? `$${remaining.toFixed(2)} remaining`\n  : `$${Math.abs(remaining).toFixed(2)} over`;\nconst text = `\\uD83D\\uDED2 Household Ledger \\u2014 ${cadence} list finalized:\\n\\n${lines}\\n\\nTotal: $${total.toFixed(2)} of $${budget.toFixed(2)} budget (${budgetLine})`;\nreturn [{ json: { text } }];"
+        "jsCode": "// Builds the Telegram summary text for a finalized (Save List) request.\n// Input is Compute Totals' own output: { list, total, deliveryFees, deliveryTotal, grandTotal, budget, remaining, cadence }.\nconst { list, total, deliveryFees, deliveryTotal, grandTotal, budget, remaining, cadence } = $json;\nconst lines = list\n  .map((r) => `\\u2022 ${r.item} (x${r.qty}) \\u2014 $${(Number(r.price) * Number(r.qty)).toFixed(2)}`)\n  .join('\\n');\nconst deliveryLine = deliveryTotal > 0\n  ? `\\nDelivery: $${deliveryTotal.toFixed(2)} (${deliveryFees.map((d) => d.store).join(', ')})`\n  : '';\nconst budgetLine = remaining >= 0\n  ? `$${remaining.toFixed(2)} remaining`\n  : `$${Math.abs(remaining).toFixed(2)} over`;\nconst text = `\\uD83D\\uDED2 Household Ledger \\u2014 ${cadence} list finalized:\\n\\n${lines}\\n\\nItems: $${total.toFixed(2)}${deliveryLine}\\nTotal: $${grandTotal.toFixed(2)} of $${budget.toFixed(2)} budget (${budgetLine})`;\nreturn [{ json: { text } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1379,6 +1410,17 @@
       ]
     },
     "Get Settings": {
+      "main": [
+        [
+          {
+            "node": "Get Stores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stores": {
       "main": [
         [
           {
