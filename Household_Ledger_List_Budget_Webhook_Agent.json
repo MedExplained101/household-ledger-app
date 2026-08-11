@@ -180,6 +180,29 @@
               },
               "renameOutput": true,
               "outputKey": "Recall"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "voice",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Voice"
             }
           ]
         },
@@ -527,7 +550,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Input 0..N-1: ShoppingList rows, last item: Settings row (merged combineAll puts them sequentially per input branch)\nconst listRows = $('Get Current List').all().map(i => i.json);\nconst settings = $('Get Settings').first().json;\nconst storeRows = $('Get Stores').all().map(i => i.json);\n\nconst total = listRows.reduce((sum, r) => sum + (Number(r.price) || 0) * (Number(r.qty) || 0), 0);\nconst budget = Number(settings.budget) || 0;\n\n// Delivery fees: charged once per distinct store on the list that has a nonzero\n// delivery_fee in the Stores tab -- flat fee only for v1, no free-delivery-above-$X\n// threshold modeling yet (see household-ledger-sheets-schema.md Stores tab note).\nconst storesUsed = [...new Set(listRows.map(r => r.store).filter(Boolean))];\nconst deliveryFees = storesUsed\n  .map(storeName => {\n    const match = storeRows.find(s => s.store === storeName);\n    return { store: storeName, fee: match ? Number(match.delivery_fee) || 0 : 0 };\n  })\n  .filter(d => d.fee > 0);\nconst deliveryTotal = Math.round(deliveryFees.reduce((sum, d) => sum + d.fee, 0) * 100) / 100;\nconst grandTotal = Math.round((total + deliveryTotal) * 100) / 100;\n\nreturn [{\n  json: {\n    list: listRows,\n    total: Math.round(total * 100) / 100,\n    deliveryFees,\n    deliveryTotal,\n    grandTotal,\n    budget,\n    remaining: Math.round((budget - grandTotal) * 100) / 100,\n    cadence: settings.cadence,\n    stores: storeRows\n  }\n}];"
+        "jsCode": "// Input 0..N-1: ShoppingList rows, last item: Settings row (merged combineAll puts them sequentially per input branch)\nconst listRows = $('Get Current List').all().map(i => i.json);\nconst settings = $('Get Settings').first().json;\nconst storeRows = $('Get Stores').all().map(i => i.json);\n\nconst total = listRows.reduce((sum, r) => sum + (Number(r.price) || 0) * (Number(r.qty) || 0), 0);\nconst budget = Number(settings.budget) || 0;\n\n// Delivery fees: charged once per distinct store on the list that has a nonzero\n// delivery_fee in the Stores tab -- flat fee only for v1, no free-delivery-above-$X\n// threshold modeling yet (see household-ledger-sheets-schema.md Stores tab note).\nconst storesUsed = [...new Set(listRows.map(r => r.store).filter(Boolean))];\nconst deliveryFees = storesUsed\n  .map(storeName => {\n    const match = storeRows.find(s => s.store === storeName);\n    return { store: storeName, fee: match ? Number(match.delivery_fee) || 0 : 0 };\n  })\n  .filter(d => d.fee > 0);\nconst deliveryTotal = Math.round(deliveryFees.reduce((sum, d) => sum + d.fee, 0) * 100) / 100;\nconst grandTotal = Math.round((total + deliveryTotal) * 100) / 100;\n\n// Voice commands: Validate Voice Command only ran for a voice-triggered request,\n// so this stays null for every other action -- never invents a reply.\nlet voiceReply = null;\ntry {\n  const v = $('Validate Voice Command').first().json;\n  if (v.intent === 'add') {\n    voiceReply = v.matchedCatalog\n      ? `Added ${v.item}${v.qty > 1 ? ` (x${v.qty})` : ''}.`\n      : `Couldn't find ${v.item} in the catalog \\u2014 try Browse Catalog or scan a receipt to add it with a real price.`;\n  } else if (v.intent === 'remove') {\n    voiceReply = `Removed ${v.item}.`;\n  } else if (v.intent === 'clear') {\n    voiceReply = 'Cleared the list.';\n  } else if (v.intent === 'finalize') {\n    voiceReply = 'List saved.';\n  } else if (v.intent === 'price_check') {\n    voiceReply = v.priceCheckReply || `No price found for ${v.item}.`;\n  } else {\n    voiceReply = \"Sorry, I didn't catch that \\u2014 try again.\";\n  }\n} catch (e) {}\n\nreturn [{\n  json: {\n    list: listRows,\n    total: Math.round(total * 100) / 100,\n    deliveryFees,\n    deliveryTotal,\n    grandTotal,\n    budget,\n    remaining: Math.round((budget - grandTotal) * 100) / 100,\n    cadence: settings.cadence,\n    stores: storeRows,\n    voiceReply\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -663,13 +686,12 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
+            "typeValidation": "loose"
           },
           "conditions": [
             {
-              "leftValue": "={{ $('List Webhook').first().json.body.action }}",
-              "rightValue": "finalize",
+              "leftValue": "={{ (() => { try { if ($('List Webhook').first().json.body.action === 'finalize') return 'true'; if ($('List Webhook').first().json.body.action === 'voice') return String($('Validate Voice Command').first().json.intent === 'finalize'); return 'false'; } catch (e) { return 'false'; } })() }}",
+              "rightValue": "true",
               "operator": {
                 "type": "string",
                 "operation": "equals"
@@ -1167,6 +1189,197 @@
         900
       ],
       "notes": "Guards against Recall to ShoppingList upserting a blank/garbage row when Get Last Saved List Rows produced only the alwaysOutputData placeholder (i.e. nothing has ever been finalized yet). Same defensive shape as Found Row to Remove?. Added 2026-08-09."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Catalog",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [720, 1100],
+      "id": "sheets-get-catalog-voice",
+      "name": "Get Catalog for Voice",
+      "executeOnce": true,
+      "notes": "Added 2026-08-11 for voice commands. Reads the whole Catalog tab once per voice request so Build Voice Prompt/Validate Voice Command can fuzzy-match the spoken item name to a real catalog entry (with a real price) instead of letting the LLM invent one.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds the prompt for Parse Voice Command via LLM -- the actual product catalog\n// is injected here so the LLM can fuzzy-match the spoken item name to an existing\n// canonical entry (same \"never invent a price\" discipline as receipt extraction --\n// an unmatched item gets flagged rather than added with a guessed price).\nconst transcript = ($('List Webhook').first().json.body.transcript || '').trim();\nconst catalogLines = $input.all()\n  .map(i => i.json)\n  .filter(r => r.item)\n  .map(r => `${r.item} | ${r.category || ''} | ${r.store || ''} | ${r.price || ''}`)\n  .join('\\n');\n\nconst prompt = `You control a household shopping list app by voice. The user's spoken command, already transcribed, was: \"${transcript}\"\n\nHere is the current product catalog (one row per item/store, format \"item | category | store | price\"):\n${catalogLines}\n\nDetermine what the user wants and respond with ONLY a JSON object, no prose, no markdown fences:\n{\"intent\": \"add\" | \"remove\" | \"clear\" | \"finalize\" | \"price_check\" | \"unclear\", \"item\": string|null, \"qty\": number|null}\n\n- \"add\": adding an item to the shopping list. Match the spoken item to the closest catalog item name if a reasonable match exists (e.g. \"milk\" matches \"Whole Milk\"); if nothing reasonably matches, still return the item as spoken, cleaned up and capitalized. Extract a quantity if one was stated (e.g. \"add two apples\" -> qty 2); default qty to 1 if not stated.\n- \"remove\": removing an item already on the list. Match to the closest catalog item name the same way.\n- \"clear\": clearing/emptying the whole list.\n- \"finalize\": saving/finalizing the list for the week.\n- \"price_check\": asking about an item's price or comparing prices. Match to the closest catalog item name.\n- \"unclear\": you can't confidently tell what they want.\n\nIf any field doesn't apply to the determined intent, use null for it rather than guessing.`;\n\nreturn [{ json: { transcript, prompt } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [944, 1100],
+      "id": "code-build-voice-prompt",
+      "name": "Build Voice Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"model\": \"claude-sonnet-5\",\n  \"max_tokens\": 1024,\n  \"messages\": [{\n    \"role\": \"user\",\n    \"content\": [{ \"type\": \"text\", \"text\": $json.prompt }]\n  }]\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1168, 1100],
+      "id": "http-parse-voice-command",
+      "name": "Parse Voice Command via LLM",
+      "notes": "Structured-JSON-only extraction, same discipline as the Price Ingestion Agent's Extract Receipt via LLM.",
+      "credentials": {
+        "httpHeaderAuth": { "id": "lTKsfwWFUX0Yh2iJ", "name": "Antrhopic API Key" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parses the LLM's voice-command JSON, resolves it against the real catalog data\n// for 'add'/'price_check' (never trust the LLM's own price math -- same discipline\n// as Validate Extraction), and defaults to 'unclear' on any parse failure so a\n// malformed response never silently mutates the list.\nlet parsed;\ntry {\n  let raw = $input.first().json.content?.find((b) => b.type === 'text')?.text ?? '';\n  raw = raw.trim().replace(/^```(?:json)?\\s*/, '').replace(/```\\s*$/, '');\n  parsed = JSON.parse(raw);\n} catch (e) {\n  return [{ json: { intent: 'unclear', item: null, qty: null, matchedCatalog: false } }];\n}\n\nconst validIntents = ['add', 'remove', 'clear', 'finalize', 'price_check', 'unclear'];\nconst intent = validIntents.includes(parsed.intent) ? parsed.intent : 'unclear';\nconst item = typeof parsed.item === 'string' && parsed.item.length > 0 ? parsed.item : null;\nconst qty = (typeof parsed.qty === 'number' && parsed.qty > 0) ? Math.round(parsed.qty) : 1;\n\nconst catalogRows = $('Get Catalog for Voice').all().map(i => i.json).filter(r => r.item);\n\nlet matchedCatalog = false;\nlet category = 'Household';\nlet store = null;\nlet price = null;\nlet priceCheckReply = null;\n\nif (item && (intent === 'add' || intent === 'price_check')) {\n  const matches = catalogRows.filter((r) => r.item === item);\n  if (matches.length > 0) {\n    matchedCatalog = true;\n    const cheapest = matches.reduce((a, b) => (Number(b.price) < Number(a.price) ? b : a));\n    category = cheapest.category || 'Household';\n    store = cheapest.store;\n    price = Number(cheapest.price);\n    if (intent === 'price_check') {\n      const lines = matches.map((r) => `${r.store}: $${Number(r.price).toFixed(2)}`).join(', ');\n      priceCheckReply = `${item} \\u2014 ${lines}`;\n    }\n  } else if (intent === 'price_check') {\n    priceCheckReply = `No price found for ${item}.`;\n  }\n}\n\nreturn [{ json: { intent, item, qty, matchedCatalog, category, store, price, priceCheckReply } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1392, 1100],
+      "id": "code-validate-voice-command",
+      "name": "Validate Voice Command"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "leftValue": "={{ $json.intent }}", "rightValue": "add", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Add"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "leftValue": "={{ $json.intent }}", "rightValue": "remove", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Remove"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "leftValue": "={{ $json.intent }}", "rightValue": "clear", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Clear"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "leftValue": "={{ $json.intent }}", "rightValue": "finalize", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Finalize"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "leftValue": "={{ $json.intent }}", "rightValue": "price_check", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "PriceCheck"
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+                "conditions": [
+                  { "leftValue": "={{ $json.intent }}", "rightValue": "unclear", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Unclear"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1616, 1100],
+      "id": "switch-route-voice-intent",
+      "name": "Route Voice Intent"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            { "leftValue": "={{ String($json.matchedCatalog) }}", "rightValue": "true", "operator": { "type": "string", "operation": "equals" } }
+          ]
+        }
+      },
+      "id": "if-voice-item-matched",
+      "name": "Voice Item Matched?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1840, 1000],
+      "notes": "True branch upserts the resolved catalog match. False branch (spoken item didn't match anything in the catalog) skips the sheet write entirely -- never invent a price -- and Compute Totals' voiceReply tells the user to add it via Browse Catalog or a receipt scan instead."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reshapes the resolved voice 'add' command into the same { body: {...} } shape\n// Upsert List Row already expects from a real webhook POST, so the existing node\n// can be reused unchanged for both regular app upserts and voice-triggered ones.\nconst v = $('Validate Voice Command').first().json;\nreturn [{ json: { body: {\n  item: v.item,\n  category: v.category,\n  store: v.store,\n  price: v.price,\n  qty: v.qty,\n  cadence: 'Week'\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2064, 960],
+      "id": "code-shape-voice-add-body",
+      "name": "Shape Voice Add Body"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reshapes the resolved voice 'remove' command into the same { body: { item } }\n// shape Find Row to Remove already expects from a real webhook POST.\nconst v = $('Validate Voice Command').first().json;\nreturn [{ json: { body: { item: v.item } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1840, 1200],
+      "id": "code-shape-voice-remove-body",
+      "name": "Shape Voice Remove Body"
     }
   ],
   "connections": {
@@ -1231,6 +1444,13 @@
         [
           {
             "node": "Get Last Saved List Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Catalog for Voice",
             "type": "main",
             "index": 0
           }
@@ -1556,6 +1776,84 @@
             "type": "main",
             "index": 0
           }
+        ]
+      ]
+    },
+    "Get Catalog for Voice": {
+      "main": [
+        [
+          { "node": "Build Voice Prompt", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Build Voice Prompt": {
+      "main": [
+        [
+          { "node": "Parse Voice Command via LLM", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse Voice Command via LLM": {
+      "main": [
+        [
+          { "node": "Validate Voice Command", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Validate Voice Command": {
+      "main": [
+        [
+          { "node": "Route Voice Intent", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Route Voice Intent": {
+      "main": [
+        [
+          { "node": "Voice Item Matched?", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Shape Voice Remove Body", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Get All ShoppingList Rows", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Get Current List", "type": "main", "index": 0 },
+          { "node": "Get Settings", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Get Current List", "type": "main", "index": 0 },
+          { "node": "Get Settings", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Get Current List", "type": "main", "index": 0 },
+          { "node": "Get Settings", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Voice Item Matched?": {
+      "main": [
+        [
+          { "node": "Shape Voice Add Body", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Get Current List", "type": "main", "index": 0 },
+          { "node": "Get Settings", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Shape Voice Add Body": {
+      "main": [
+        [
+          { "node": "Upsert List Row", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Shape Voice Remove Body": {
+      "main": [
+        [
+          { "node": "Find Row to Remove", "type": "main", "index": 0 }
         ]
       ]
     }
