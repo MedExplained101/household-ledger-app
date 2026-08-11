@@ -596,28 +596,59 @@ export default function HouseholdLedger() {
             onChange={handleFileSelected}
             className="hidden"
           />
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-start gap-2">
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={scanning}
-              className="text-xs uppercase tracking-widest font-bold text-[#0F1E3D] disabled:opacity-50 flex items-center gap-1.5 border border-[#E08A3E] rounded-sm bg-[#E08A3E] hover:bg-[#EFA05C] px-3 py-1.5"
+              className="text-xs uppercase tracking-widest font-bold text-[#0F1E3D] disabled:opacity-50 flex items-center gap-1.5 border border-[#E08A3E] rounded-full bg-[#E08A3E] hover:bg-[#EFA05C] px-3 py-1.5"
             >
               {scanning ? (
                 <>
-                  <RefreshCw size={12} className="animate-spin" /> Scanning
+                  <RefreshCw size={14} className="animate-spin" /> Scanning
                 </>
               ) : (
                 <>
-                  <Camera size={12} /> Scan/Upload Receipt
+                  <Camera size={14} /> Scan/Upload Receipt
                 </>
               )}
             </button>
             <button
               onClick={startBarcodeScan}
-              className="text-xs uppercase tracking-widest font-bold text-[#0F1E3D] flex items-center gap-1.5 border border-[#6B9E71] rounded-sm bg-[#6B9E71] hover:bg-[#7FB185] px-3 py-1.5"
+              className="text-xs uppercase tracking-widest font-bold text-[#0F1E3D] flex items-center gap-1.5 border border-[#6B9E71] rounded-full bg-[#6B9E71] hover:bg-[#7FB185] px-3 py-1.5"
             >
-              <ScanBarcode size={12} /> Scan Barcode
+              <ScanBarcode size={14} /> Scan Barcode
             </button>
+            {voiceSupported && (
+              <div className="relative">
+                <button
+                  onClick={toggleListening}
+                  aria-label={listening ? "Listening, tap to stop" : "Speak a command to manage your list"}
+                  className={`text-xs uppercase tracking-widest font-bold text-[#0F1E3D] flex items-center gap-1.5 border rounded-full px-3 py-1.5 transition-colors ${
+                    listening
+                      ? "bg-[#E8756A] border-[#E8756A] animate-pulse"
+                      : "bg-[#E08A3E] border-[#E08A3E] hover:bg-[#EFA05C]"
+                  }`}
+                >
+                  <Mic size={14} />
+                  {listening ? "Listening…" : "Speak a Command"}
+                </button>
+                {showVoiceHint && (
+                  <div className="absolute top-full left-0 mt-2 z-20 w-[220px] border border-[#E08A3E] bg-[#16264A] text-[#F2F0E6] text-xs px-3 py-2 pr-6 rounded-sm shadow-lg">
+                    <button
+                      onClick={() => {
+                        setShowVoiceHint(false);
+                        clearTimeout(voiceHintTimeout.current);
+                      }}
+                      aria-label="Dismiss"
+                      className="absolute top-1 right-1 text-[#93A3C4] hover:text-[#F2F0E6]"
+                    >
+                      <X size={12} />
+                    </button>
+                    New: try saying &ldquo;Add milk&rdquo; or &ldquo;What&apos;s the price of eggs?&rdquo;
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="md:hidden text-xs uppercase tracking-widest text-[#93A3C4] font-mono-tab flex items-center gap-1.5">
             {syncStatusContent}
@@ -672,7 +703,7 @@ export default function HouseholdLedger() {
         </div>
       )}
 
-      <main className="max-w-5xl mx-auto px-6 pt-8 pb-28 grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
+      <main className="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
         <aside className="space-y-6">
           <div>
             <label className="block text-xs uppercase tracking-widest text-[#93A3C4] mb-2">
@@ -1073,40 +1104,6 @@ export default function HouseholdLedger() {
           </div>
         </section>
       </main>
-
-      {voiceSupported && (
-        <div className="fixed bottom-6 right-6 z-20 flex flex-col items-end gap-2">
-          {showVoiceHint && (
-            <div className="relative max-w-[220px] border border-[#E08A3E] bg-[#16264A] text-[#F2F0E6] text-xs px-3 py-2 pr-6 rounded-sm shadow-lg">
-              <button
-                onClick={() => {
-                  setShowVoiceHint(false);
-                  clearTimeout(voiceHintTimeout.current);
-                }}
-                aria-label="Dismiss"
-                className="absolute top-1 right-1 text-[#93A3C4] hover:text-[#F2F0E6]"
-              >
-                <X size={12} />
-              </button>
-              New: try saying &ldquo;Add milk&rdquo; or &ldquo;What&apos;s the price of eggs?&rdquo;
-            </div>
-          )}
-          <button
-            onClick={toggleListening}
-            aria-label={listening ? "Listening, tap to stop" : "Speak a command to manage your list"}
-            className={`flex items-center gap-2 rounded-full border pl-3 pr-4 py-3 shadow-lg transition-colors ${
-              listening
-                ? "bg-[#E8756A] border-[#E8756A] text-[#0F1E3D] animate-pulse"
-                : "bg-[#E08A3E] border-[#E08A3E] text-[#0F1E3D] hover:bg-[#EFA05C]"
-            }`}
-          >
-            <Mic size={20} />
-            <span className="text-xs uppercase tracking-widest font-bold">
-              {listening ? "Listening…" : "Speak a command"}
-            </span>
-          </button>
-        </div>
-      )}
 
       {scanningBarcode && (
         <div className="fixed inset-0 z-30 bg-black/90 flex flex-col items-center justify-center p-4">
