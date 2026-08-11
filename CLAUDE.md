@@ -66,6 +66,14 @@ not a bug to clean up.
    separate bots?
 4. Check-in cadence: every 2 days (current default), daily, or every 3?
 5. Store distances: manual entry to start, or auto-geocoding right away?
+6. **Resolved 2026-08-11** — online vs. in-store pricing: online channels
+   (Costco same-day, Walmart delivery, Amazon) get their own `store` entry
+   (` - Online` suffix) rather than sharing prices with the in-store row,
+   since the two can genuinely differ. Delivery fees live on the `Stores`
+   tab (flat fee per store, manually maintained — no free-delivery
+   threshold modeling yet) and get added to the app's budget total once
+   per distinct online store on the current list. See
+   household-ledger-sheets-schema.md's `Catalog`/`Stores` tab notes.
 
 ## Working style / conventions to follow
 - Don't imply a price comparison is confirmed unless both sides have a

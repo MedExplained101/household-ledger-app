@@ -8,6 +8,7 @@ Create one new spreadsheet named `Household Ledger` with these tabs. Column orde
 - `confidence`: free text for now, e.g. `receipt` / `web-search` / `estimate`
 - Seed this tab from `purchase_history.csv` — one row per item/store pair, same as the current CATALOG array in the app
 - `product_url` — optional, added 2026-07-31 for `Household_Ledger_Price_Refresh_Agent.json`'s hybrid price-source design (Open Decision #1, resolved): a direct link to this item's product page at this store. Rows with a URL get scraped directly (more reliable); blank rows fall back to a general web search instead. Fill these in gradually — not required for the workflow to run.
+- `store` naming convention (added 2026-08-11 for online-channel pricing, Open Decision #6, resolved): online/delivery orders from a store that also has in-store pricing get their own `store` value with an ` - Online` suffix — e.g. `Costco - Online`, `Walmart - Online` — kept distinct from the plain `Costco` / `Walmart` in-store rows since the two channels don't always charge the same price for the same item. Amazon has no in-store channel, so it's just `Amazon`. No schema change needed for this — `store` was already free text. `Household_Ledger_Price_Ingestion_Agent.json`'s extraction prompt applies this suffix automatically when a receipt is clearly an online order confirmation (falls back to the plain store name when it can't tell, same "don't guess" convention as everything else in this project).
 
 ## Tab: `ShoppingList`
 | item | category | store | price | qty | cadence | added_date |
@@ -45,10 +46,11 @@ Create one new spreadsheet named `Household Ledger` with these tabs. Column orde
 - `cycle_count`: increments each time an item completes a purchase→finish cycle
 
 ## Tab: `Stores`
-| store | address | lat | long | distance_from_home_mi | est_trip_cost |
-|---|---|---|---|---|---|
+| store | address | lat | long | distance_from_home_mi | est_trip_cost | channel | delivery_fee |
+|---|---|---|---|---|---|---|---|
 
 - Start with `distance_from_home_mi` and `est_trip_cost` entered manually for Costco and Walmart; add rows as new stores (Publix, Amazon N/A, bulk warehouses) come online
+- `channel`/`delivery_fee` — added 2026-08-11 for online-order pricing (Open Decision #6, resolved): `channel` is `in-store` or `online`; `delivery_fee` is a flat dollar amount charged once per checkout from that store, used by the List/Budget Webhook Agent to add delivery to the app's running total whenever the current shopping list includes an item from that store. Add one `Stores` row per channel actually used — e.g. `Costco` (`in-store`, blank fee) and `Costco - Online` (`online`, its delivery fee), matching the `store` naming convention documented under the `Catalog` tab above. **Flat fee only for v1 — no free-delivery-above-$X threshold modeling yet** (Walmart+/Costco same-day promos that waive the fee above a minimum order aren't accounted for), same "don't fake precision beyond what's actually modeled" spirit as the Catalog caution-icon convention. `delivery_fee` is manually maintained here, same as `distance_from_home_mi`/`est_trip_cost` — it is *not* auto-updated from scanned receipts (the Price Ingestion Agent logs whatever delivery fee it actually reads on a receipt into `PriceLog` as its own `Delivery Fee` row per store, for a historical record, but the live app total always reads the fee from this tab, not from the last receipt).
 
 ---
 **Next:** once this spreadsheet exists, grab its ID from the URL (`docs.google.com/spreadsheets/d/THIS_PART/edit`) — the Webhook Agent JSON below needs it dropped into every Google Sheets node's `documentId`.
