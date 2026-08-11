@@ -596,44 +596,44 @@ export default function HouseholdLedger() {
             onChange={handleFileSelected}
             className="hidden"
           />
-          <div className="flex flex-wrap items-start gap-2">
+          <div className={`grid ${voiceSupported ? "grid-cols-3" : "grid-cols-2"} gap-2 w-full max-w-md`}>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={scanning}
-              className="text-xs uppercase tracking-widest font-bold text-[#0F1E3D] disabled:opacity-50 flex items-center gap-1.5 border border-[#E08A3E] rounded-full bg-[#E08A3E] hover:bg-[#EFA05C] px-3 py-1.5"
+              className="text-[10px] sm:text-xs uppercase tracking-widest font-bold text-[#0F1E3D] disabled:opacity-50 flex items-center justify-center gap-1.5 border border-[#E08A3E] rounded-full bg-[#E08A3E] hover:bg-[#EFA05C] px-2 sm:px-3 py-1.5 whitespace-nowrap"
             >
               {scanning ? (
                 <>
-                  <RefreshCw size={14} className="animate-spin" /> Scanning
+                  <RefreshCw size={14} className="animate-spin shrink-0" /> Scanning
                 </>
               ) : (
                 <>
-                  <Camera size={14} /> Scan/Upload Receipt
+                  <Camera size={14} className="shrink-0" /> Receipt
                 </>
               )}
             </button>
             <button
               onClick={startBarcodeScan}
-              className="text-xs uppercase tracking-widest font-bold text-[#0F1E3D] flex items-center gap-1.5 border border-[#6B9E71] rounded-full bg-[#6B9E71] hover:bg-[#7FB185] px-3 py-1.5"
+              className="text-[10px] sm:text-xs uppercase tracking-widest font-bold text-[#0F1E3D] flex items-center justify-center gap-1.5 border border-[#6B9E71] rounded-full bg-[#6B9E71] hover:bg-[#7FB185] px-2 sm:px-3 py-1.5 whitespace-nowrap"
             >
-              <ScanBarcode size={14} /> Scan Barcode
+              <ScanBarcode size={14} className="shrink-0" /> Barcode
             </button>
             {voiceSupported && (
               <div className="relative">
                 <button
                   onClick={toggleListening}
                   aria-label={listening ? "Listening, tap to stop" : "Speak a command to manage your list"}
-                  className={`text-xs uppercase tracking-widest font-bold text-[#0F1E3D] flex items-center gap-1.5 border rounded-full px-3 py-1.5 transition-colors ${
+                  className={`w-full text-[10px] sm:text-xs uppercase tracking-widest font-bold text-[#0F1E3D] flex items-center justify-center gap-1.5 border rounded-full px-2 sm:px-3 py-1.5 whitespace-nowrap transition-colors ${
                     listening
                       ? "bg-[#E8756A] border-[#E8756A] animate-pulse"
                       : "bg-[#E08A3E] border-[#E08A3E] hover:bg-[#EFA05C]"
                   }`}
                 >
-                  <Mic size={14} />
-                  {listening ? "Listening…" : "Speak a Command"}
+                  <Mic size={14} className="shrink-0" />
+                  {listening ? "Listening…" : "Speak"}
                 </button>
                 {showVoiceHint && (
-                  <div className="absolute top-full left-0 mt-2 z-20 w-[220px] border border-[#E08A3E] bg-[#16264A] text-[#F2F0E6] text-xs px-3 py-2 pr-6 rounded-sm shadow-lg">
+                  <div className="absolute top-full right-0 mt-2 z-20 w-[220px] border border-[#E08A3E] bg-[#16264A] text-[#F2F0E6] text-xs px-3 py-2 pr-6 rounded-sm shadow-lg">
                     <button
                       onClick={() => {
                         setShowVoiceHint(false);
