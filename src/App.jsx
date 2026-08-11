@@ -128,6 +128,7 @@ export default function HouseholdLedger() {
   const [query, setQuery] = useState("");
   const [openCat, setOpenCat] = useState(CATEGORIES[0]);
   const [list, setList] = useState([]);
+  const [storeRows, setStoreRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState(null);
@@ -169,6 +170,7 @@ export default function HouseholdLedger() {
     setList((data.list || []).filter((r) => r.item).map(rowToListItem));
     if (data.budget) setBudget(Number(data.budget));
     if (data.cadence) setCadence(data.cadence);
+    setStoreRows(data.stores || []);
   };
 
   const refresh = useCallback(async () => {
@@ -220,9 +222,10 @@ export default function HouseholdLedger() {
         const skippedNote = data.skippedCount
           ? ` (${data.skippedCount} line${data.skippedCount === 1 ? "" : "s"} skipped — unreadable price)`
           : "";
+        const deliveryNote = data.deliveryFee ? ` (includes $${data.deliveryFee.toFixed(2)} delivery)` : "";
         setScanMessage({
           type: "success",
-          text: `Logged ${data.itemsLogged} item${data.itemsLogged === 1 ? "" : "s"} from ${data.store}, total $${data.total.toFixed(2)}${skippedNote}.`,
+          text: `Logged ${data.itemsLogged} item${data.itemsLogged === 1 ? "" : "s"} from ${data.store}, total $${data.total.toFixed(2)}${deliveryNote}${skippedNote}.`,
         });
       } else {
         setScanMessage({ type: "error", text: data.reason || "Couldn't read that receipt." });
@@ -388,8 +391,20 @@ export default function HouseholdLedger() {
   }, [query]);
 
   const total = list.reduce((s, p) => s + p.price * p.qty, 0);
+  // Delivery fees: charged once per distinct store on the list that has a nonzero
+  // delivery_fee on the Stores sheet -- flat fee only, no free-delivery-above-$X
+  // threshold modeling yet (see household-ledger-sheets-schema.md Stores tab note).
+  const storesUsed = [...new Set(list.map((p) => p.store).filter(Boolean))];
+  const deliveryFees = storesUsed
+    .map((storeName) => {
+      const match = storeRows.find((s) => s.store === storeName);
+      return { store: storeName, fee: match ? Number(match.delivery_fee) || 0 : 0 };
+    })
+    .filter((d) => d.fee > 0);
+  const deliveryTotal = deliveryFees.reduce((s, d) => s + d.fee, 0);
+  const grandTotal = total + deliveryTotal;
   const adjustedBudget = budget;
-  const remaining = adjustedBudget - total;
+  const remaining = adjustedBudget - grandTotal;
   const over = remaining < 0;
 
   const recurring = CATALOG.filter((i) => /recurring/.test(i.note || ""));
@@ -814,6 +829,12 @@ export default function HouseholdLedger() {
                   <span>Subtotal</span>
                   <span>${total.toFixed(2)}</span>
                 </div>
+                {deliveryTotal > 0 && (
+                  <div className="flex justify-between text-[#93A3C4]">
+                    <span>Delivery ({deliveryFees.map((d) => d.store).join(", ")})</span>
+                    <span>${deliveryTotal.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span>Budget ({cadence.toLowerCase()})</span>
                   <span>${adjustedBudget.toFixed(2)}</span>
