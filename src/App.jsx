@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Plus, Minus, X, ChevronDown, AlertTriangle, Search, RefreshCw, WifiOff, Camera, Mic } from "lucide-react";
+import { Plus, Minus, X, ChevronDown, AlertTriangle, Search, RefreshCw, WifiOff, Camera, Mic, ScanBarcode } from "lucide-react";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 
 // Your n8n production webhook — the mobile app never touches Google Sheets
 // directly, it POSTs actions here and the workflow reads/writes ShoppingList + Settings.
@@ -147,6 +148,12 @@ export default function HouseholdLedger() {
   const voiceSupported = !!SpeechRecognitionAPI;
   const [showVoiceHint, setShowVoiceHint] = useState(false);
   const voiceHintTimeout = useRef(null);
+  const [scanningBarcode, setScanningBarcode] = useState(false);
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
+  const [barcodeResult, setBarcodeResult] = useState(null);
+  const [barcodeError, setBarcodeError] = useState(null);
+  const videoRef = useRef(null);
+  const barcodeReaderRef = useRef(null);
 
   // Maps a ShoppingList row from the sheet back into the shape the UI expects,
   // reattaching the matching CATALOG entry so stores/notes/sizeUnknown still work.
@@ -224,6 +231,7 @@ export default function HouseholdLedger() {
       clearTimeout(voiceMessageTimeout.current);
       clearTimeout(voiceHintTimeout.current);
       recognitionRef.current?.abort();
+      videoRef.current?.srcObject?.getTracks().forEach((track) => track.stop());
     };
   }, []);
 
@@ -316,6 +324,70 @@ export default function HouseholdLedger() {
     recognitionRef.current = recognition;
     setListening(true);
     recognition.start();
+  }
+
+  // Barcode scanning: camera decode happens entirely client-side (zxing), then the
+  // raw code is sent to the same list/budget webhook -- the Webhook Agent checks
+  // your own Catalog first (instant, trusted) and only falls back to an external
+  // lookup (clearly labeled as such) when nothing here matches. Read-only: nothing
+  // gets written back to Sheets from a scan.
+  async function startBarcodeScan() {
+    setBarcodeError(null);
+    setBarcodeResult(null);
+    setScanningBarcode(true);
+  }
+
+  function stopBarcodeScan() {
+    barcodeReaderRef.current = null;
+    const stream = videoRef.current?.srcObject;
+    stream?.getTracks().forEach((track) => track.stop());
+    setScanningBarcode(false);
+  }
+
+  useEffect(() => {
+    if (!scanningBarcode || !videoRef.current) return;
+    const reader = new BrowserMultiFormatReader();
+    barcodeReaderRef.current = reader;
+    let cancelled = false;
+    reader
+      .decodeFromConstraints(
+        { video: { facingMode: "environment" } },
+        videoRef.current,
+        (result, err) => {
+          if (cancelled || !result) return;
+          cancelled = true;
+          stopBarcodeScan();
+          lookupBarcode(result.getText());
+        }
+      )
+      .catch(() => {
+        if (!cancelled) {
+          setBarcodeError("Couldn't access the camera — check permissions and try again.");
+          setScanningBarcode(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scanningBarcode]);
+
+  async function lookupBarcode(code) {
+    setBarcodeLoading(true);
+    setBarcodeError(null);
+    try {
+      const data = await callWebhook({ action: "barcode", barcode: code });
+      applyServerState(data);
+      if (data.barcodeResult) {
+        setBarcodeResult(data.barcodeResult);
+      } else {
+        setBarcodeError("Couldn't look that item up — try again.");
+      }
+    } catch {
+      setBarcodeError("Couldn't reach the server — try again.");
+    } finally {
+      setBarcodeLoading(false);
+    }
   }
 
   async function addItem(item) {
@@ -512,21 +584,29 @@ export default function HouseholdLedger() {
             onChange={handleFileSelected}
             className="hidden"
           />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={scanning}
-            className="text-xs uppercase tracking-widest font-bold text-[#0F1E3D] disabled:opacity-50 flex items-center gap-1.5 border border-[#E08A3E] rounded-sm bg-[#E08A3E] hover:bg-[#EFA05C] px-3 py-1.5"
-          >
-            {scanning ? (
-              <>
-                <RefreshCw size={12} className="animate-spin" /> Scanning
-              </>
-            ) : (
-              <>
-                <Camera size={12} /> Scan/Upload Receipt
-              </>
-            )}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={scanning}
+              className="text-xs uppercase tracking-widest font-bold text-[#0F1E3D] disabled:opacity-50 flex items-center gap-1.5 border border-[#E08A3E] rounded-sm bg-[#E08A3E] hover:bg-[#EFA05C] px-3 py-1.5"
+            >
+              {scanning ? (
+                <>
+                  <RefreshCw size={12} className="animate-spin" /> Scanning
+                </>
+              ) : (
+                <>
+                  <Camera size={12} /> Scan/Upload Receipt
+                </>
+              )}
+            </button>
+            <button
+              onClick={startBarcodeScan}
+              className="text-xs uppercase tracking-widest font-bold text-[#0F1E3D] flex items-center gap-1.5 border border-[#6B9E71] rounded-sm bg-[#6B9E71] hover:bg-[#7FB185] px-3 py-1.5"
+            >
+              <ScanBarcode size={12} /> Scan Barcode
+            </button>
+          </div>
           <div className="md:hidden text-xs uppercase tracking-widest text-[#93A3C4] font-mono-tab flex items-center gap-1.5">
             {syncStatusContent}
           </div>
@@ -1013,6 +1093,82 @@ export default function HouseholdLedger() {
               {listening ? "Listening…" : "Speak a command"}
             </span>
           </button>
+        </div>
+      )}
+
+      {scanningBarcode && (
+        <div className="fixed inset-0 z-30 bg-black/90 flex flex-col items-center justify-center p-4">
+          <video ref={videoRef} className="w-full max-w-md rounded-sm" muted playsInline />
+          <p className="text-xs text-[#B8C2D9] mt-4 text-center max-w-sm">
+            Point the camera at a barcode.
+          </p>
+          {barcodeError && (
+            <p className="text-xs text-[#E8756A] mt-2 text-center max-w-sm">{barcodeError}</p>
+          )}
+          <button
+            onClick={stopBarcodeScan}
+            className="mt-4 px-4 py-2 text-xs uppercase tracking-widest border border-[#F2F0E6] text-[#F2F0E6] rounded-sm hover:bg-[#1B2E52]"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {(barcodeLoading || barcodeResult || (barcodeError && !scanningBarcode)) && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => {
+            setBarcodeResult(null);
+            setBarcodeError(null);
+          }}
+        >
+          <div
+            className="bg-[#16264A] border border-[#F2F0E6] rounded-sm max-w-sm w-full p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs uppercase tracking-widest text-[#93A3C4]">Barcode result</span>
+              <button
+                onClick={() => {
+                  setBarcodeResult(null);
+                  setBarcodeError(null);
+                }}
+                className="text-[#93A3C4] hover:text-[#F2F0E6]"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            {barcodeLoading ? (
+              <div className="flex items-center gap-2 text-sm text-[#93A3C4] py-4 justify-center">
+                <RefreshCw size={14} className="animate-spin" /> Looking it up…
+              </div>
+            ) : barcodeError ? (
+              <div className="text-sm text-[#E8756A]">{barcodeError}</div>
+            ) : barcodeResult ? (
+              <div>
+                <div className="text-base mb-1">{barcodeResult.item || "Unrecognized item"}</div>
+                {barcodeResult.source === "external" && (
+                  <div className="text-[10px] uppercase tracking-widest text-[#C98A2C] flex items-center gap-1 mb-2">
+                    <AlertTriangle size={10} /> Live web result — not in your catalog yet
+                  </div>
+                )}
+                {barcodeResult.offers && barcodeResult.offers.length > 0 ? (
+                  <div className="divide-y divide-[#3D5178] border-t border-b border-[#3D5178] mt-2">
+                    {barcodeResult.offers.map((o, i) => (
+                      <div key={i} className="flex justify-between py-1.5 text-sm">
+                        <span>{o.store}</span>
+                        <span className="font-mono-tab">${Number(o.price).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-[#93A3C4] mt-2">
+                    No price found for this item{barcodeResult.source === "catalog" ? "" : " yet"}.
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
     </div>

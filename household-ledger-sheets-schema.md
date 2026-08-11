@@ -2,12 +2,13 @@
 Create one new spreadsheet named `Household Ledger` with these tabs. Column order matters for the n8n nodes below (they auto-map by header name, but keep headers exact).
 
 ## Tab: `Catalog`
-| item | category | store | price | unit_price | size | unit_label | last_updated | confidence | product_url |
-|---|---|---|---|---|---|---|---|---|---|
+| item | category | store | price | unit_price | size | unit_label | last_updated | confidence | product_url | barcode |
+|---|---|---|---|---|---|---|---|---|---|---|
 
 - `confidence`: free text for now, e.g. `receipt` / `web-search` / `estimate`
 - Seed this tab from `purchase_history.csv` — one row per item/store pair, same as the current CATALOG array in the app
 - `product_url` — optional, added 2026-07-31 for `Household_Ledger_Price_Refresh_Agent.json`'s hybrid price-source design (Open Decision #1, resolved): a direct link to this item's product page at this store. Rows with a URL get scraped directly (more reliable); blank rows fall back to a general web search instead. Fill these in gradually — not required for the workflow to run.
+- `barcode` — optional, added 2026-08-11 for the in-app barcode scanner feature: the UPC/EAN printed on the item, used to match a camera scan straight to this row for an instant, free price lookup. Same "fill in gradually" convention as `product_url` — most rows will start blank and get filled in as items are actually scanned. When a scanned barcode has no match here, the List/Budget Webhook Agent's `barcode` action falls back to the UPCitemdb trial API (no key, ~100 lookups/day, coverage inconsistent) for product identity and any offers it can find — those results are clearly labeled as live/external in the UI, never merged into this sheet automatically (no write-back, per the "never invent or silently trust external data" convention).
 - `store` naming convention (added 2026-08-11 for online-channel pricing, Open Decision #6, resolved): online/delivery orders from a store that also has in-store pricing get their own `store` value with an ` - Online` suffix — e.g. `Costco - Online`, `Walmart - Online` — kept distinct from the plain `Costco` / `Walmart` in-store rows since the two channels don't always charge the same price for the same item. Amazon has no in-store channel, so it's just `Amazon`. No schema change needed for this — `store` was already free text. `Household_Ledger_Price_Ingestion_Agent.json`'s extraction prompt applies this suffix automatically when a receipt is clearly an online order confirmation (falls back to the plain store name when it can't tell, same "don't guess" convention as everything else in this project).
 
 ## Tab: `ShoppingList`
