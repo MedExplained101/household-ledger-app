@@ -157,6 +157,7 @@ export default function HouseholdLedger() {
   const [barcodeError, setBarcodeError] = useState(null);
   const videoRef = useRef(null);
   const barcodeReaderRef = useRef(null);
+  const budgetSavedRef = useRef(200);
 
   // Maps a ShoppingList row from the sheet back into the shape the UI expects,
   // reattaching the matching CATALOG entry so stores/notes/sizeUnknown still work.
@@ -195,7 +196,10 @@ export default function HouseholdLedger() {
 
   const applyServerState = (data) => {
     setList((data.list || []).filter((r) => r.item).map(rowToListItem));
-    if (data.budget) setBudget(Number(data.budget));
+    if (data.budget) {
+      setBudget(Number(data.budget));
+      budgetSavedRef.current = Number(data.budget);
+    }
     if (data.cadence) setCadence(data.cadence);
     setStoreRows(data.stores || []);
   };
@@ -479,6 +483,23 @@ export default function HouseholdLedger() {
     }
   }
 
+  // Fires on blur rather than every keystroke -- the input already updates local
+  // state live via onChange, this just persists whatever value the field lands on.
+  async function saveBudget(value) {
+    if (value === budgetSavedRef.current) return;
+    setSyncing(true);
+    setError(null);
+    try {
+      const data = await callWebhook({ action: "set_budget", budget: value });
+      applyServerState(data);
+      budgetSavedRef.current = value;
+    } catch {
+      setError("Couldn't save the budget — try again.");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function removeItem(name) {
     setSyncing(true);
     setError(null);
@@ -731,12 +752,10 @@ export default function HouseholdLedger() {
                 type="number"
                 value={budget}
                 onChange={(e) => setBudget(Number(e.target.value) || 0)}
+                onBlur={(e) => saveBudget(Number(e.target.value) || 0)}
                 className="w-full outline-none font-mono-tab bg-transparent"
               />
             </div>
-            <p className="text-[10px] text-[#93A3C4] mt-1">
-              Loaded from Settings — editing here doesn&apos;t write back yet (Settings sheet isn&apos;t wired for updates).
-            </p>
           </div>
 
           <div>
