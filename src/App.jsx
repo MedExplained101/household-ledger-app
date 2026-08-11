@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Plus, Minus, X, ChevronDown, AlertTriangle, Search, RefreshCw, WifiOff, Camera } from "lucide-react";
+import { Plus, Minus, X, ChevronDown, AlertTriangle, Search, RefreshCw, WifiOff, Camera, Mic } from "lucide-react";
 
 // Your n8n production webhook — the mobile app never touches Google Sheets
 // directly, it POSTs actions here and the workflow reads/writes ShoppingList + Settings.
@@ -139,6 +139,12 @@ export default function HouseholdLedger() {
   const [scanMessage, setScanMessage] = useState(null);
   const scanMessageTimeout = useRef(null);
   const fileInputRef = useRef(null);
+  const [listening, setListening] = useState(false);
+  const [voiceMessage, setVoiceMessage] = useState(null);
+  const voiceMessageTimeout = useRef(null);
+  const recognitionRef = useRef(null);
+  const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const voiceSupported = !!SpeechRecognitionAPI;
 
   // Maps a ShoppingList row from the sheet back into the shape the UI expects,
   // reattaching the matching CATALOG entry so stores/notes/sizeUnknown still work.
@@ -195,6 +201,8 @@ export default function HouseholdLedger() {
     return () => {
       clearTimeout(confirmClearTimeout.current);
       clearTimeout(scanMessageTimeout.current);
+      clearTimeout(voiceMessageTimeout.current);
+      recognitionRef.current?.abort();
     };
   }, []);
 
@@ -242,6 +250,49 @@ export default function HouseholdLedger() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (file) scanReceipt(file);
+  }
+
+  // Voice commands: transcript capture happens entirely client-side (Web Speech
+  // API), then the raw transcript is sent to the same list/budget webhook the
+  // rest of the app already uses -- the List/Budget Webhook Agent's Route
+  // Voice Intent branch does the LLM parsing + catalog validation server-side.
+  async function sendVoiceCommand(transcript) {
+    setSyncing(true);
+    setVoiceMessage(null);
+    try {
+      const data = await callWebhook({ action: "voice", transcript });
+      applyServerState(data);
+      setVoiceMessage({ type: "success", text: data.voiceReply || "Done." });
+    } catch {
+      setVoiceMessage({ type: "error", text: "Couldn't reach the server — try again." });
+    } finally {
+      setSyncing(false);
+      voiceMessageTimeout.current = setTimeout(() => setVoiceMessage(null), 7000);
+    }
+  }
+
+  function toggleListening() {
+    if (!voiceSupported) return;
+    if (listening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const recognition = new SpeechRecognitionAPI();
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      sendVoiceCommand(transcript);
+    };
+    recognition.onerror = () => {
+      setVoiceMessage({ type: "error", text: "Didn't catch that — try again." });
+      voiceMessageTimeout.current = setTimeout(() => setVoiceMessage(null), 7000);
+    };
+    recognition.onend = () => setListening(false);
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
   }
 
   async function addItem(item) {
@@ -488,6 +539,20 @@ export default function HouseholdLedger() {
             }`}
           >
             {scanMessage.text}
+          </div>
+        </div>
+      )}
+
+      {voiceMessage && (
+        <div className="max-w-5xl mx-auto px-6 pt-4">
+          <div
+            className={`border text-xs px-3 py-2 rounded-sm ${
+              voiceMessage.type === "success"
+                ? "border-[#6B9E71] bg-[#1B2E1F] text-[#6B9E71]"
+                : "border-[#E8756A] bg-[#3D1F1C] text-[#E8756A]"
+            }`}
+          >
+            {voiceMessage.text}
           </div>
         </div>
       )}
@@ -893,6 +958,20 @@ export default function HouseholdLedger() {
           </div>
         </section>
       </main>
+
+      {voiceSupported && (
+        <button
+          onClick={toggleListening}
+          title={listening ? "Listening… tap to stop" : "Speak a command"}
+          className={`fixed bottom-6 right-6 z-20 w-14 h-14 rounded-full border flex items-center justify-center shadow-lg transition-colors ${
+            listening
+              ? "bg-[#E8756A] border-[#E8756A] text-[#0F1E3D] animate-pulse"
+              : "bg-[#E08A3E] border-[#E08A3E] text-[#0F1E3D] hover:bg-[#EFA05C]"
+          }`}
+        >
+          <Mic size={22} />
+        </button>
+      )}
     </div>
   );
 }
