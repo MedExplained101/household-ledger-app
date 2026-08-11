@@ -105,13 +105,16 @@ const CATALOG = [
 const CATEGORIES = [...new Set(CATALOG.map((i) => i.category))];
 
 function priceOf(entry) {
+  if (entry == null) return null;
   return typeof entry === "number" ? entry : entry.price;
 }
 function unitPriceOf(entry) {
-  return typeof entry === "number" ? null : entry.unitPrice ?? null;
+  if (entry == null || typeof entry === "number") return null;
+  return entry.unitPrice ?? null;
 }
 function unitLabelOf(entry) {
-  return typeof entry === "number" ? null : entry.unitLabel ?? null;
+  if (entry == null || typeof entry === "number") return null;
+  return entry.unitLabel ?? null;
 }
 
 function bestStore(stores) {
@@ -159,12 +162,21 @@ export default function HouseholdLedger() {
   // reattaching the matching CATALOG entry so stores/notes/sizeUnknown still work.
   function rowToListItem(row) {
     const catalogEntry = CATALOG.find((c) => c.name === row.item);
+    const knownStores = catalogEntry?.stores || {};
+    // The row's own store/price is always authoritative -- if it's a variant the
+    // static CATALOG doesn't know about yet (e.g. a new " - Online" channel added
+    // via voice/barcode/receipt), fold it in rather than dropping it, so the
+    // dropdown and price math always have a real entry for the store this item
+    // is actually on.
+    const stores = row.store in knownStores
+      ? knownStores
+      : { ...knownStores, [row.store]: Number(row.price) };
     return {
       name: row.item,
       category: row.category,
       note: catalogEntry?.note,
       sizeUnknown: catalogEntry?.sizeUnknown,
-      stores: catalogEntry?.stores || { [row.store]: Number(row.price) },
+      stores,
       store: row.store,
       price: Number(row.price),
       qty: Number(row.qty),
