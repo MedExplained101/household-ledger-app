@@ -587,8 +587,11 @@ export default function HouseholdLedger() {
         .dashed-top { background-image: repeating-linear-gradient(90deg, #33456B 0, #33456B 6px, transparent 6px, transparent 12px); height: 2px; }
       `}</style>
 
-      <header className="border-b-2 border-[#F2F0E6] px-4 sm:px-6 py-4 sm:py-5 flex flex-col gap-3 md:grid md:grid-cols-[1fr_auto_1fr] md:items-center md:gap-6 max-w-5xl mx-auto">
-        <div className="order-2 md:order-1 flex flex-col items-start gap-2 md:block">
+      <header className="border-b-2 border-[#F2F0E6] px-4 sm:px-6 py-4 sm:py-5 max-w-5xl mx-auto md:relative">
+        <div className="hidden md:flex absolute top-5 right-6 text-xs uppercase tracking-widest text-[#93A3C4] font-mono-tab items-center gap-1.5">
+          {syncStatusContent}
+        </div>
+        <div className="flex flex-col items-center gap-3 text-center">
           <input
             ref={fileInputRef}
             type="file"
@@ -596,6 +599,9 @@ export default function HouseholdLedger() {
             onChange={handleFileSelected}
             className="hidden"
           />
+          <h1 className="text-3xl tracking-tight" style={{ letterSpacing: "-0.01em" }}>
+            Household Ledger
+          </h1>
           <div className={`grid ${voiceSupported ? "grid-cols-3" : "grid-cols-2"} gap-2 w-full max-w-md`}>
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -653,14 +659,6 @@ export default function HouseholdLedger() {
           <div className="md:hidden text-xs uppercase tracking-widest text-[#93A3C4] font-mono-tab flex items-center gap-1.5">
             {syncStatusContent}
           </div>
-        </div>
-        <div className="order-1 md:order-2 text-center">
-          <h1 className="text-3xl tracking-tight" style={{ letterSpacing: "-0.01em" }}>
-            Household Ledger
-          </h1>
-        </div>
-        <div className="hidden md:flex order-3 text-right text-xs uppercase tracking-widest text-[#93A3C4] font-mono-tab items-center gap-1.5 justify-end">
-          {syncStatusContent}
         </div>
       </header>
 
