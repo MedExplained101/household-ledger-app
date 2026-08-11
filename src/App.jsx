@@ -145,6 +145,8 @@ export default function HouseholdLedger() {
   const recognitionRef = useRef(null);
   const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
   const voiceSupported = !!SpeechRecognitionAPI;
+  const [showVoiceHint, setShowVoiceHint] = useState(false);
+  const voiceHintTimeout = useRef(null);
 
   // Maps a ShoppingList row from the sheet back into the shape the UI expects,
   // reattaching the matching CATALOG entry so stores/notes/sizeUnknown still work.
@@ -197,11 +199,30 @@ export default function HouseholdLedger() {
     refresh();
   }, [refresh]);
 
+  // Nudge first-time visitors toward the voice button once, then never again --
+  // returning users already know it's there.
+  useEffect(() => {
+    if (!voiceSupported) return;
+    try {
+      if (localStorage.getItem("hl_voice_hint_seen")) return;
+    } catch {
+      return;
+    }
+    setShowVoiceHint(true);
+    voiceHintTimeout.current = setTimeout(() => setShowVoiceHint(false), 7000);
+    try {
+      localStorage.setItem("hl_voice_hint_seen", "1");
+    } catch {
+      /* private-browsing storage can throw; hint just won't persist */
+    }
+  }, [voiceSupported]);
+
   useEffect(() => {
     return () => {
       clearTimeout(confirmClearTimeout.current);
       clearTimeout(scanMessageTimeout.current);
       clearTimeout(voiceMessageTimeout.current);
+      clearTimeout(voiceHintTimeout.current);
       recognitionRef.current?.abort();
     };
   }, []);
@@ -273,6 +294,8 @@ export default function HouseholdLedger() {
 
   function toggleListening() {
     if (!voiceSupported) return;
+    setShowVoiceHint(false);
+    clearTimeout(voiceHintTimeout.current);
     if (listening) {
       recognitionRef.current?.stop();
       return;
@@ -960,17 +983,37 @@ export default function HouseholdLedger() {
       </main>
 
       {voiceSupported && (
-        <button
-          onClick={toggleListening}
-          title={listening ? "Listening… tap to stop" : "Speak a command"}
-          className={`fixed bottom-6 right-6 z-20 w-14 h-14 rounded-full border flex items-center justify-center shadow-lg transition-colors ${
-            listening
-              ? "bg-[#E8756A] border-[#E8756A] text-[#0F1E3D] animate-pulse"
-              : "bg-[#E08A3E] border-[#E08A3E] text-[#0F1E3D] hover:bg-[#EFA05C]"
-          }`}
-        >
-          <Mic size={22} />
-        </button>
+        <div className="fixed bottom-6 right-6 z-20 flex flex-col items-end gap-2">
+          {showVoiceHint && (
+            <div className="relative max-w-[220px] border border-[#E08A3E] bg-[#16264A] text-[#F2F0E6] text-xs px-3 py-2 pr-6 rounded-sm shadow-lg">
+              <button
+                onClick={() => {
+                  setShowVoiceHint(false);
+                  clearTimeout(voiceHintTimeout.current);
+                }}
+                aria-label="Dismiss"
+                className="absolute top-1 right-1 text-[#93A3C4] hover:text-[#F2F0E6]"
+              >
+                <X size={12} />
+              </button>
+              New: try saying &ldquo;Add milk&rdquo; or &ldquo;What&apos;s the price of eggs?&rdquo;
+            </div>
+          )}
+          <button
+            onClick={toggleListening}
+            aria-label={listening ? "Listening, tap to stop" : "Speak a command to manage your list"}
+            className={`flex items-center gap-2 rounded-full border pl-3 pr-4 py-3 shadow-lg transition-colors ${
+              listening
+                ? "bg-[#E8756A] border-[#E8756A] text-[#0F1E3D] animate-pulse"
+                : "bg-[#E08A3E] border-[#E08A3E] text-[#0F1E3D] hover:bg-[#EFA05C]"
+            }`}
+          >
+            <Mic size={20} />
+            <span className="text-xs uppercase tracking-widest font-bold">
+              {listening ? "Listening…" : "Speak a command"}
+            </span>
+          </button>
+        </div>
       )}
     </div>
   );
