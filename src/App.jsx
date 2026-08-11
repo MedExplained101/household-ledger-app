@@ -353,7 +353,7 @@ export default function HouseholdLedger() {
       .decodeFromConstraints(
         { video: { facingMode: "environment" } },
         videoRef.current,
-        (result, err) => {
+        (result) => {
           if (cancelled || !result) return;
           cancelled = true;
           stopBarcodeScan();
@@ -576,7 +576,7 @@ export default function HouseholdLedger() {
       `}</style>
 
       <header className="border-b-2 border-[#F2F0E6] px-4 sm:px-6 py-4 sm:py-5 flex flex-col gap-3 md:grid md:grid-cols-[1fr_auto_1fr] md:items-center md:gap-0 max-w-5xl mx-auto">
-        <div className="order-2 md:order-1 flex items-center justify-between md:block">
+        <div className="order-2 md:order-1 flex flex-col items-start gap-2 md:block">
           <input
             ref={fileInputRef}
             type="file"
@@ -660,7 +660,7 @@ export default function HouseholdLedger() {
         </div>
       )}
 
-      <main className="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
+      <main className="max-w-5xl mx-auto px-6 pt-8 pb-28 grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
         <aside className="space-y-6">
           <div>
             <label className="block text-xs uppercase tracking-widest text-[#93A3C4] mb-2">
@@ -879,7 +879,7 @@ export default function HouseholdLedger() {
                           </button>
                         </div>
 
-                        <div className="text-right font-mono-tab">
+                        <div className="text-right font-mono-tab ml-auto">
                           <div>${(item.price * item.qty).toFixed(2)}</div>
                           <div className="text-[10px] text-[#93A3C4]">
                             ${item.price.toFixed(2)} ea
@@ -916,7 +916,7 @@ export default function HouseholdLedger() {
                     const lowest = bestStore(item.stores)[0];
                     return (
                       <tr key={item.name} className="border-b border-[#3D5178] last:border-0">
-                        <td className="py-2 px-3">
+                        <td className="py-2.5 px-3 align-top">
                           <div className="flex items-center gap-1.5">
                             {item.name}
                             {item.sizeUnknown && (
@@ -929,7 +929,7 @@ export default function HouseholdLedger() {
                             <div className="text-xs text-[#93A3C4]">{item.note}</div>
                           )}
                         </td>
-                        <td className="py-2 px-3">
+                        <td className="py-2.5 px-3 align-top">
                           {storeNames.length > 1 ? (
                             <select
                               value={item.store}
@@ -946,7 +946,7 @@ export default function HouseholdLedger() {
                             <span className="text-xs text-[#B8C2D9]">{item.store}</span>
                           )}
                         </td>
-                        <td className="py-2 px-3">
+                        <td className="py-2.5 px-3 align-top">
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => setQty(item.name, item.qty - 1)}
@@ -963,7 +963,7 @@ export default function HouseholdLedger() {
                             </button>
                           </div>
                         </td>
-                        <td className="py-2 px-3 text-right font-mono-tab">
+                        <td className="py-2.5 px-3 text-right font-mono-tab align-top">
                           ${item.price.toFixed(2)}
                           {unitPriceOf(item.stores[item.store]) !== null && (
                             <div className="text-[10px] text-[#93A3C4]">
@@ -972,10 +972,10 @@ export default function HouseholdLedger() {
                             </div>
                           )}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono-tab">
+                        <td className="py-2.5 px-3 text-right font-mono-tab align-top">
                           ${(item.price * item.qty).toFixed(2)}
                         </td>
-                        <td className="py-2 px-2 text-right">
+                        <td className="py-2.5 px-2 text-right align-top">
                           <button
                             onClick={() => removeItem(item.name)}
                             className="text-[#93A3C4] hover:text-[#E8756A]"
