@@ -1,7 +1,10 @@
-# Household Ledger — deployable app
+# Tally — deployable app
 
-This is a standalone Vite + React project — the same app you tested as a Claude artifact,
-but packaged so it can run outside Claude's sandbox and actually reach your n8n webhook.
+Formerly "Household Ledger" — renamed 2026-08-12, same app. This is a standalone Vite +
+React project — the same app you tested as a Claude artifact, but packaged so it can run
+outside Claude's sandbox and actually reach your n8n webhook.
+
+Live at **https://tally-mutandi.netlify.app**.
 
 ## Deploy — Netlify (canonical)
 

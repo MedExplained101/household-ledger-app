@@ -1,4 +1,9 @@
-# CLAUDE.md — Household Ledger Project
+# CLAUDE.md — Tally Project
+
+App is branded **Tally** as of 2026-08-12 (was "Household Ledger" before that — repo
+folder name, n8n workflow names, and internal filenames like
+`Household_Ledger_*.json` are unchanged and still use the old name; only the
+user-facing app name and the Netlify URL changed, now `tally-mutandi.netlify.app`).
 
 ## What this project is
 A tool to plan recurring (day/week/month) household grocery and household-goods

@@ -1,6 +1,6 @@
 {
-  "name": "Household Ledger",
-  "short_name": "Ledger",
+  "name": "Tally",
+  "short_name": "Tally",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FBF7EE",

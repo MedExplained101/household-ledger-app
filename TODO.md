@@ -213,4 +213,16 @@ Not yet reverified end-to-end after this third round of fixes on this feature �
 **Not yet done, flagged but out of scope for this session**: the front-end buttons for Clear All / Save List / Load Last List (`src/App.jsx`) only exist on this unmerged branch (`claude/project-todo-tracking-2jqwq2`, 11 commits ahead of `main`) — Netlify deploys from `main`, so none of these three features are actually reachable from the real app UI yet, even though all three are now fully confirmed working at the backend/webhook level. Merging this branch to `main` is a real, live-production-affecting action and wasn't done without asking first.
 
 ---
+
+## Session log — 2026-08-12
+
+**App renamed: Household Ledger → Tally.** User-facing rebrand only, chosen after a naming brainstorm (short, personified, matches the app's actual function — a running tally of prices/spend). Scope was explicitly limited to what's user-visible, confirmed with the user before touching anything:
+
+- **Netlify site renamed** `homeshoppingapp` → `tally-mutandi` — live URL is now `https://tally-mutandi.netlify.app`. The old `homeshoppingapp.netlify.app` address stops working (Netlify doesn't auto-redirect a renamed site's old subdomain) — anything still pointing at it (the printed handout done earlier this session, old bookmarks) needs the new link.
+- **Frontend**: `index.html` `<title>`, `public/manifest.json` `name`/`short_name`, and the in-app `<h1>` wordmark all updated to "Tally".
+- **Docs**: `README.md`, `USER_GUIDE.md`, and `CLAUDE.md`'s title updated with the new name and URL.
+- **Deliberately left unchanged**: the n8n workflow display names (still "Household Ledger - ..."), the backend webhook URL paths (still contain `household-ledger-list`/`household-ledger-ingest-receipt`), and every `Household_Ledger_*.json` file name in this repo. None of these are user-visible, and renaming the live webhook paths specifically carries real risk (re-registering a trigger in n8n, possible brief downtime) for zero user-facing benefit — flagged as optional future cleanup, not done here.
+- The printable handout artifact from earlier this session was republished with the new name/URL (see conversation, not a file in this repo).
+
+---
 *Add new items here as they come up, and check them off (or link a GitHub issue) as they're resolved — this keeps the doc useful instead of stale.*

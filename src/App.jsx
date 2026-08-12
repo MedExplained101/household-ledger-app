@@ -621,7 +621,7 @@ export default function HouseholdLedger() {
             className="hidden"
           />
           <h1 className="text-3xl tracking-tight" style={{ letterSpacing: "-0.01em" }}>
-            Household Ledger
+            Tally
           </h1>
           <div className={`grid ${voiceSupported ? "grid-cols-3" : "grid-cols-2"} gap-2 w-full max-w-md`}>
             <button
