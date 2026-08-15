@@ -48,9 +48,14 @@ not a bug to clean up.
     updates `Catalog`. Not built yet.
   - **List/Budget Webhook Agent** — the one implemented so far (see
     `Household_Ledger_List_Budget_Webhook_Agent.json`). Mobile/web app POSTs
-    `{action: "get" | "upsert" | "remove"}` to this webhook; it never talks
-    to Sheets directly. Still needs a real spreadsheet ID and Google Sheets
-    credential wired in before it's live — see `TODO.md`.
+    `{action: "get" | "upsert" | "remove" | "clear" | "finalize" | "recall" |
+    "voice" | "barcode" | "log_price" | "update_store_location"}` to this
+    webhook; it never talks to Sheets directly. `log_price` (in-store price
+    logging, added 2026-08-15) and `update_store_location` (auto-geolocated
+    store setup, added 2026-08-15) are backend-complete and frontend-wired as
+    of this commit but not yet confirmed live — see `TODO.md` for what's
+    still unverified, including a real Google Maps credential ID for the
+    optional reverse-geocode step.
   - **Budget Alert Listener** — Telegram alert when a list goes over budget. Not built yet.
   - **Check-In Agent** — scheduled (default every 2 days) Telegram
     check-in on inventory status (`stocked` / `low` / `finished`). Not built yet.
@@ -62,7 +67,11 @@ not a bug to clean up.
 - **Frontend**: `src/App.jsx` — React app, wired to a live n8n webhook
   (`WEBHOOK_URL` constant near the top of the file) rather than the static
   in-file catalog it started as. Confirm this URL is still correct before
-  assuming the app is live.
+  assuming the app is live. New surfaces added 2026-08-15: the Barcode button
+  now opens a chooser ("Add to list" vs. "Log price only") before the camera
+  opens, and a "Manage stores" screen (reachable from the budget panel) lists
+  `Stores` rows with a "Use my location" button per store, falling back to
+  manual lat/long entry if geolocation is denied or unsupported.
 
 ## Open decisions not yet finalized (see bottom of architecture.md)
 1. Does the Price Refresh Agent hit known store URLs, or search generally?
