@@ -48,9 +48,14 @@ not a bug to clean up.
     updates `Catalog`. Not built yet.
   - **List/Budget Webhook Agent** — the one implemented so far (see
     `Household_Ledger_List_Budget_Webhook_Agent.json`). Mobile/web app POSTs
-    `{action: "get" | "upsert" | "remove"}` to this webhook; it never talks
-    to Sheets directly. Still needs a real spreadsheet ID and Google Sheets
-    credential wired in before it's live — see `TODO.md`.
+    `{action: "get" | "upsert" | "remove" | "clear" | "finalize" | "recall" |
+    "voice" | "log_price" | "update_store_location"}` to this webhook; it
+    never talks to Sheets directly. Note (2026-08-15): the checked-in JSON is
+    known to lag the live n8n workflow for at least two actions (`barcode`,
+    `set_budget`) that work live but were never synced back to this file —
+    confirm against the live workflow before assuming this file is complete.
+    `log_price` and `update_store_location` are scaffolded in this file but
+    **not yet applied live** — see TODO.md.
   - **Budget Alert Listener** — Telegram alert when a list goes over budget. Not built yet.
   - **Check-In Agent** — scheduled (default every 2 days) Telegram
     check-in on inventory status (`stocked` / `low` / `finished`). Not built yet.

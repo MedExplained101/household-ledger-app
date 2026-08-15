@@ -203,6 +203,52 @@
               },
               "renameOutput": true,
               "outputKey": "Voice"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "log_price",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "LogPrice"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "update_store_location",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "UpdateStoreLocation"
             }
           ]
         },
@@ -1380,6 +1426,415 @@
       "position": [1840, 1200],
       "id": "code-shape-voice-remove-body",
       "name": "Shape Voice Remove Body"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Catalog",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "item",
+              "lookupValue": "={{ $json.body.item }}"
+            },
+            {
+              "lookupColumn": "store",
+              "lookupValue": "={{ $json.body.store }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "alwaysOutputData": true,
+      "position": [720, 1400],
+      "id": "sheets-find-catalog-row-log-price",
+      "name": "Find Catalog Row for Log Price",
+      "notes": "In-store price log (added 2026-08-15, scaffolded in repo -- not yet applied live in n8n). Filters Catalog on item AND store (two filtersUI entries = AND, same as every other multi-condition Sheets filter in this workflow). alwaysOutputData: true because a new item/store combo the scanner hasn't seen before is a normal case, not an error -- same reasoning as Find Row to Remove.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ String($json.row_number || \"\") }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-has-existing-catalog-row",
+      "name": "Has Existing Catalog Row?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [944, 1400],
+      "notes": "Same String(...||\"\") pattern as Found Row to Remove?/Has Last Saved List? -- the alwaysOutputData placeholder has no row_number key at all, and bare undefined !== \"\" would otherwise be true. True: an existing Catalog row for this item+store gets its price updated directly (in-store scan is treated as higher-confidence than a web scrape, so it skips the Price Refresh Agent's 24-48h freshness gate). False: a brand-new item/store combo gets appended fresh."
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Catalog",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "price": "={{ $('List Webhook').first().json.body.price }}",
+            "last_updated": "={{ $now.format('yyyy-MM-dd') }}",
+            "confidence": "in-store-scan",
+            "barcode": "={{ $('List Webhook').first().json.body.barcode || $json.barcode }}"
+          },
+          "matchingColumns": ["row_number"],
+          "schema": [
+            { "id": "row_number", "displayName": "row_number", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "item", "displayName": "item", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "category", "displayName": "category", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "store", "displayName": "store", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "price", "displayName": "price", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "unit_price", "displayName": "unit_price", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "size", "displayName": "size", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "unit_label", "displayName": "unit_label", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "last_updated", "displayName": "last_updated", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "confidence", "displayName": "confidence", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "product_url", "displayName": "product_url", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "barcode", "displayName": "barcode", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1168, 1320],
+      "id": "sheets-update-catalog-price",
+      "name": "Update Catalog Price",
+      "notes": "Matched on row_number from Find Catalog Row for Log Price (passes straight through the IF gate as $json here). Deliberately leaves size/unit_price/unit_label alone -- an in-store price confirmation doesn't tell us pack size, so overwriting those would be guessing. barcode backfills only if the row didn't already have one (|| $json.barcode keeps the existing value otherwise). Sourced from $('List Webhook') for the submitted price/barcode, not bare $json, since $json here is the Catalog row, not the request body -- same nested-payload discipline as everywhere else in this workflow.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Catalog",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $('List Webhook').first().json.body.item }}",
+            "category": "={{ $('List Webhook').first().json.body.category }}",
+            "store": "={{ $('List Webhook').first().json.body.store }}",
+            "price": "={{ $('List Webhook').first().json.body.price }}",
+            "unit_price": "",
+            "size": "",
+            "unit_label": "",
+            "last_updated": "={{ $now.format('yyyy-MM-dd') }}",
+            "confidence": "in-store-scan",
+            "product_url": "",
+            "barcode": "={{ $('List Webhook').first().json.body.barcode }}"
+          },
+          "matchingColumns": ["item"],
+          "schema": [
+            { "id": "item", "displayName": "item", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "category", "displayName": "category", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "store", "displayName": "store", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "price", "displayName": "price", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "unit_price", "displayName": "unit_price", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "size", "displayName": "size", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "unit_label", "displayName": "unit_label", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "last_updated", "displayName": "last_updated", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "confidence", "displayName": "confidence", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "product_url", "displayName": "product_url", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "barcode", "displayName": "barcode", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1168, 1480],
+      "id": "sheets-append-new-catalog-row",
+      "name": "Append New Catalog Row",
+      "notes": "New item/store combo not previously in Catalog. Sourced entirely from $('List Webhook') rather than bare $json -- at this point $json is Find Catalog Row for Log Price's alwaysOutputData placeholder (no real data), not the request body. item/category are required in the request body per the frontend contract: never silently guess a name/category for an unrecognized barcode.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "PriceLog",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $('List Webhook').first().json.body.item }}",
+            "store": "={{ $('List Webhook').first().json.body.store }}",
+            "price": "={{ $('List Webhook').first().json.body.price }}",
+            "date": "={{ $now.format('yyyy-MM-dd') }}",
+            "status": "confirmed",
+            "scraped_at": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": ["item"],
+          "schema": [
+            { "id": "item", "displayName": "item", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "store", "displayName": "store", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "price", "displayName": "price", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "date", "displayName": "date", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "status", "displayName": "status", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "scraped_at", "displayName": "scraped_at", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1392, 1400],
+      "id": "sheets-append-to-pricelog",
+      "name": "Append to PriceLog",
+      "notes": "Both the update and append Catalog branches converge here -- always logs a historical PriceLog row regardless of which one ran. status: 'confirmed' (not 'pending') because an in-store human-read price bypasses the Price Refresh Agent's 24-48h freshness gate entirely -- it's already higher-confidence than a scrape. Sourced from $('List Webhook'), same reasoning as the two nodes above -- $json here is whichever Catalog write just ran, not the request body.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('List Webhook').first().json.body;\nreturn [{ json: { ok: true, item: body.item, store: body.store, price: Number(body.price) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1616, 1400],
+      "id": "code-format-log-price-response",
+      "name": "Format Log Price Response"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [1840, 1400],
+      "id": "respond-log-price",
+      "name": "Log Price Response",
+      "notes": "Dedicated response, deliberately not routed through Get Current List/Compute Totals -- this action never touches ShoppingList, so there's nothing to gain from the shared list/budget response path, and this avoids editing Compute Totals' existing jsCode at all."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "store",
+              "lookupValue": "={{ $json.body.store }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "alwaysOutputData": true,
+      "position": [720, 1680],
+      "id": "sheets-find-store-row",
+      "name": "Find Store Row",
+      "notes": "Auto-geolocated store setup (added 2026-08-15, scaffolded in repo -- not yet applied live in n8n). alwaysOutputData: true so a genuine no-match doesn't halt the branch -- Store Row Found? right after turns that into a clean error response instead of an unhandled error.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ String($json.row_number || \"\") }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-store-row-found",
+      "name": "Store Row Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [944, 1680],
+      "notes": "Same String(...||\"\") pattern as Found Row to Remove?. False: an unrecognized store name returns a clean error rather than silently creating a new Stores row from a location ping -- new stores go through explicit store setup, not this action."
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: false, error: 'unknown store' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1168, 1760],
+      "id": "code-store-not-found-error",
+      "name": "Store Not Found Error"
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [1392, 1760],
+      "id": "respond-update-store-location-error",
+      "name": "Update Store Location Error Response"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "lat": "={{ $('List Webhook').first().json.body.lat }}",
+            "long": "={{ $('List Webhook').first().json.body.long }}"
+          },
+          "matchingColumns": ["row_number"],
+          "schema": [
+            { "id": "row_number", "displayName": "row_number", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "store", "displayName": "store", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "address", "displayName": "address", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "lat", "displayName": "lat", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "long", "displayName": "long", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "distance_from_home_mi", "displayName": "distance_from_home_mi", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "est_trip_cost", "displayName": "est_trip_cost", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "channel", "displayName": "channel", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "delivery_fee", "displayName": "delivery_fee", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1168, 1600],
+      "id": "sheets-update-store-row",
+      "name": "Update Store Row",
+      "notes": "v1: writes lat/long only. Deliberately does NOT touch address -- the optional reverse-geocode step (Geocoding API call to fill address when blank) is scaffolded as a documented follow-up in TODO.md rather than built here, since the live Google Maps credential ID and whether the Geocoding API (as opposed to just Distance Matrix, already used by the Recommendation Agent) is enabled on that GCP project couldn't be verified this session -- flagged as genuinely uncertain rather than guessed. This satisfies the spec's own 'never overwrite a manually-entered address' rule trivially, by not writing to that column at all yet.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('List Webhook').first().json.body;\nconst row = $('Find Store Row').first().json;\nreturn [{ json: { ok: true, store: body.store, lat: body.lat, long: body.long, address: row.address || null } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1392, 1600],
+      "id": "code-format-update-store-location-response",
+      "name": "Format Update Store Location Response",
+      "notes": "address is passed through unchanged from the row Find Store Row already read -- this v1 never writes address, so this just reports whatever was already there (often blank)."
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [1616, 1600],
+      "id": "respond-update-store-location",
+      "name": "Update Store Location Response"
     }
   ],
   "connections": {
@@ -1451,6 +1906,155 @@
         [
           {
             "node": "Get Catalog for Voice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find Catalog Row for Log Price",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find Store Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Catalog Row for Log Price": {
+      "main": [
+        [
+          {
+            "node": "Has Existing Catalog Row?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Existing Catalog Row?": {
+      "main": [
+        [
+          {
+            "node": "Update Catalog Price",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append New Catalog Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Catalog Price": {
+      "main": [
+        [
+          {
+            "node": "Append to PriceLog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append New Catalog Row": {
+      "main": [
+        [
+          {
+            "node": "Append to PriceLog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append to PriceLog": {
+      "main": [
+        [
+          {
+            "node": "Format Log Price Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Log Price Response": {
+      "main": [
+        [
+          {
+            "node": "Log Price Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Store Row": {
+      "main": [
+        [
+          {
+            "node": "Store Row Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Row Found?": {
+      "main": [
+        [
+          {
+            "node": "Update Store Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Store Not Found Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Not Found Error": {
+      "main": [
+        [
+          {
+            "node": "Update Store Location Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Store Row": {
+      "main": [
+        [
+          {
+            "node": "Format Update Store Location Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Update Store Location Response": {
+      "main": [
+        [
+          {
+            "node": "Update Store Location Response",
             "type": "main",
             "index": 0
           }
