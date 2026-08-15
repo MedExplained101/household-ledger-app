@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { Plus, Minus, X, ChevronDown, AlertTriangle, Search, RefreshCw, WifiOff, Camera, Mic, ScanBarcode } from "lucide-react";
+import { Plus, Minus, X, ChevronDown, AlertTriangle, Search, RefreshCw, WifiOff, Camera, Mic, ScanBarcode, Tag, MapPin } from "lucide-react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 
 // Your n8n production webhook — the mobile app never touches Google Sheets
@@ -159,6 +159,25 @@ export default function HouseholdLedger() {
   const barcodeReaderRef = useRef(null);
   const budgetSavedRef = useRef(200);
 
+  // Scan-intent chooser: the Barcode button now asks "add to list" vs "log price
+  // only" before opening the camera, rather than always adding. scanIntentRef is a
+  // ref (not state) because the zxing decode callback below closes over it and
+  // fires well after any render that set it.
+  const [showScanIntentChooser, setShowScanIntentChooser] = useState(false);
+  const scanIntentRef = useRef("add");
+  const [logPriceForm, setLogPriceForm] = useState(null);
+  const [logPriceSubmitting, setLogPriceSubmitting] = useState(false);
+  const [logPriceMessage, setLogPriceMessage] = useState(null);
+  const logPriceMessageTimeout = useRef(null);
+
+  // Manage Stores (Feature 2: auto-geolocated store setup)
+  const [showManageStores, setShowManageStores] = useState(false);
+  const [geoLoadingStore, setGeoLoadingStore] = useState(null);
+  const [manualEntryStore, setManualEntryStore] = useState(null);
+  const [manualCoords, setManualCoords] = useState({ lat: "", long: "" });
+  const [manageStoresMessage, setManageStoresMessage] = useState(null);
+  const manageStoresMessageTimeout = useRef(null);
+
   // Maps a ShoppingList row from the sheet back into the shape the UI expects,
   // reattaching the matching CATALOG entry so stores/notes/sizeUnknown still work.
   function rowToListItem(row) {
@@ -246,6 +265,8 @@ export default function HouseholdLedger() {
       clearTimeout(scanMessageTimeout.current);
       clearTimeout(voiceMessageTimeout.current);
       clearTimeout(voiceHintTimeout.current);
+      clearTimeout(logPriceMessageTimeout.current);
+      clearTimeout(manageStoresMessageTimeout.current);
       recognitionRef.current?.abort();
       videoRef.current?.srcObject?.getTracks().forEach((track) => track.stop());
     };
@@ -347,9 +368,12 @@ export default function HouseholdLedger() {
   // your own Catalog first (instant, trusted) and only falls back to an external
   // lookup (clearly labeled as such) when nothing here matches. Read-only: nothing
   // gets written back to Sheets from a scan.
-  async function startBarcodeScan() {
+  async function startBarcodeScan(intent) {
+    scanIntentRef.current = intent;
+    setShowScanIntentChooser(false);
     setBarcodeError(null);
     setBarcodeResult(null);
+    setLogPriceForm(null);
     setScanningBarcode(true);
   }
 
@@ -373,7 +397,11 @@ export default function HouseholdLedger() {
           if (cancelled || !result) return;
           cancelled = true;
           stopBarcodeScan();
-          lookupBarcode(result.getText());
+          if (scanIntentRef.current === "log_price") {
+            startLogPriceFlow(result.getText());
+          } else {
+            lookupBarcode(result.getText());
+          }
         }
       )
       .catch(() => {
@@ -403,6 +431,70 @@ export default function HouseholdLedger() {
       setBarcodeError("Couldn't reach the server — try again.");
     } finally {
       setBarcodeLoading(false);
+    }
+  }
+
+  // In-store price logging: same camera decode as the "add to list" flow above,
+  // but never writes to ShoppingList -- it opens a confirm form (item/category/
+  // store/price, all user-confirmed) that posts a separate "log_price" action.
+  // The barcode lookup here is a best-effort prefill only (same "barcode" action
+  // as lookupBarcode) -- if it fails or comes back empty the form just opens
+  // blank, since a human reading the shelf tag directly doesn't strictly need it.
+  async function startLogPriceFlow(code) {
+    let prefillItem = "";
+    let prefillCategory = "";
+    try {
+      const data = await callWebhook({ action: "barcode", barcode: code });
+      const name = data?.barcodeResult?.item;
+      if (name) {
+        prefillItem = name;
+        const match = CATALOG.find((c) => c.name === name);
+        if (match) prefillCategory = match.category;
+      }
+    } catch {
+      // Best-effort only -- the confirm form works fine with blank fields too.
+    }
+    setLogPriceForm({
+      barcode: code,
+      item: prefillItem,
+      category: prefillCategory,
+      store: "",
+      price: "",
+    });
+  }
+
+  function updateLogPriceField(field, value) {
+    setLogPriceForm((f) => (f ? { ...f, [field]: value } : f));
+  }
+
+  async function submitLogPrice() {
+    const form = logPriceForm;
+    if (!form) return;
+    const item = form.item.trim();
+    const category = form.category.trim();
+    const store = form.store.trim();
+    const price = Number(form.price);
+    if (!item || !category || !store || !price || price <= 0) {
+      setLogPriceMessage({ type: "error", text: "Item, category, store, and a price are all required." });
+      return;
+    }
+    setLogPriceSubmitting(true);
+    try {
+      await callWebhook({
+        action: "log_price",
+        barcode: form.barcode,
+        item,
+        category,
+        store,
+        price,
+      });
+      setLogPriceMessage({ type: "success", text: `Logged $${price.toFixed(2)} for ${item} at ${store}.` });
+      setLogPriceForm(null);
+    } catch {
+      setLogPriceMessage({ type: "error", text: "Couldn't log that price — try again." });
+    } finally {
+      setLogPriceSubmitting(false);
+      logPriceMessageTimeout.current = setTimeout(() => setLogPriceMessage(null), 7000);
     }
   }
 
@@ -563,6 +655,76 @@ export default function HouseholdLedger() {
     }
   }
 
+  // Auto-geolocated store setup: saves raw lat/long as-is (no validation against
+  // the store's claimed address -- there's no reliable way to check that
+  // server-side; trust the human standing there). Shared by both the
+  // "Use my location" (GPS) path and the manual lat/long fallback below.
+  async function saveStoreLocation(storeName, lat, long) {
+    try {
+      const data = await callWebhook({ action: "update_store_location", store: storeName, lat, long });
+      if (data.ok) {
+        setStoreRows((rows) =>
+          rows.map((r) => (r.store === storeName ? { ...r, lat: data.lat, long: data.long, address: data.address || r.address } : r))
+        );
+        setManageStoresMessage({
+          type: "success",
+          text: data.address
+            ? `Saved location for ${storeName} — address auto-filled from your location, double check it's right.`
+            : `Saved location for ${storeName}.`,
+        });
+        setManualEntryStore(null);
+        setManualCoords({ lat: "", long: "" });
+      } else {
+        setManageStoresMessage({
+          type: "error",
+          text: data.error === "unknown store" ? `${storeName} isn't set up in Stores yet — add it there first.` : "Couldn't save that location.",
+        });
+      }
+    } catch {
+      setManageStoresMessage({ type: "error", text: "Couldn't reach the server — try again." });
+    } finally {
+      manageStoresMessageTimeout.current = setTimeout(() => setManageStoresMessage(null), 7000);
+    }
+  }
+
+  function handleUseMyLocation(storeName) {
+    if (!navigator.geolocation) {
+      setManualEntryStore(storeName);
+      setManageStoresMessage({ type: "error", text: "Geolocation isn't supported in this browser — enter coordinates manually below." });
+      manageStoresMessageTimeout.current = setTimeout(() => setManageStoresMessage(null), 7000);
+      return;
+    }
+    setGeoLoadingStore(storeName);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        setGeoLoadingStore(null);
+        await saveStoreLocation(storeName, pos.coords.latitude, pos.coords.longitude);
+      },
+      (err) => {
+        setGeoLoadingStore(null);
+        setManualEntryStore(storeName);
+        const text =
+          err.code === err.PERMISSION_DENIED
+            ? "Location permission denied — enter coordinates manually below, or enable location access in your browser settings."
+            : "Couldn't get your location — enter coordinates manually below.";
+        setManageStoresMessage({ type: "error", text });
+        manageStoresMessageTimeout.current = setTimeout(() => setManageStoresMessage(null), 7000);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
+  async function submitManualCoords(storeName) {
+    const lat = Number(manualCoords.lat);
+    const long = Number(manualCoords.long);
+    if (!manualCoords.lat || !manualCoords.long || Number.isNaN(lat) || Number.isNaN(long)) {
+      setManageStoresMessage({ type: "error", text: "Enter both a latitude and longitude." });
+      manageStoresMessageTimeout.current = setTimeout(() => setManageStoresMessage(null), 7000);
+      return;
+    }
+    await saveStoreLocation(storeName, lat, long);
+  }
+
   const filteredCatalog = useMemo(() => {
     if (!query.trim()) return null;
     const q = query.toLowerCase();
@@ -640,7 +802,7 @@ export default function HouseholdLedger() {
               )}
             </button>
             <button
-              onClick={startBarcodeScan}
+              onClick={() => setShowScanIntentChooser(true)}
               className="text-[10px] sm:text-xs uppercase tracking-widest font-bold text-[#0F1E3D] flex items-center justify-center gap-1.5 border border-[#6B9E71] rounded-full bg-[#6B9E71] hover:bg-[#7FB185] px-2 sm:px-3 py-1.5 whitespace-nowrap"
             >
               <ScanBarcode size={14} className="shrink-0" /> Barcode
@@ -719,6 +881,20 @@ export default function HouseholdLedger() {
         </div>
       )}
 
+      {logPriceMessage && (
+        <div className="max-w-5xl mx-auto px-6 pt-4">
+          <div
+            className={`border text-xs px-3 py-2 rounded-sm ${
+              logPriceMessage.type === "success"
+                ? "border-[#6B9E71] bg-[#1B2E1F] text-[#6B9E71]"
+                : "border-[#E8756A] bg-[#3D1F1C] text-[#E8756A]"
+            }`}
+          >
+            {logPriceMessage.text}
+          </div>
+        </div>
+      )}
+
       <main className="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
         <aside className="space-y-6">
           <div>
@@ -756,6 +932,12 @@ export default function HouseholdLedger() {
                 className="w-full outline-none font-mono-tab bg-transparent"
               />
             </div>
+            <button
+              onClick={() => setShowManageStores(true)}
+              className="mt-1.5 text-[11px] uppercase tracking-widest text-[#93A3C4] hover:text-[#F2F0E6] flex items-center gap-1"
+            >
+              <MapPin size={11} /> Manage stores
+            </button>
           </div>
 
           <div>
@@ -1191,6 +1373,241 @@ export default function HouseholdLedger() {
                 )}
               </div>
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {showScanIntentChooser && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => setShowScanIntentChooser(false)}
+        >
+          <div
+            className="bg-[#16264A] border border-[#F2F0E6] rounded-sm max-w-xs w-full p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs uppercase tracking-widest text-[#93A3C4]">Scan a barcode</span>
+              <button
+                onClick={() => setShowScanIntentChooser(false)}
+                className="text-[#93A3C4] hover:text-[#F2F0E6]"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => startBarcodeScan("add")}
+                className="w-full flex items-center gap-2 text-left px-3 py-2.5 text-sm border border-[#3D5178] rounded-sm hover:bg-[#1B2E52]"
+              >
+                <ScanBarcode size={15} className="text-[#6B9E71] shrink-0" />
+                <span>
+                  <div>Add to list</div>
+                  <div className="text-[11px] text-[#93A3C4]">Look up the item and price, then add it</div>
+                </span>
+              </button>
+              <button
+                onClick={() => startBarcodeScan("log_price")}
+                className="w-full flex items-center gap-2 text-left px-3 py-2.5 text-sm border border-[#3D5178] rounded-sm hover:bg-[#1B2E52]"
+              >
+                <Tag size={15} className="text-[#E08A3E] shrink-0" />
+                <span>
+                  <div>Log price only</div>
+                  <div className="text-[11px] text-[#93A3C4]">Record what this store charges right now — doesn&apos;t touch your list</div>
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {logPriceForm && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => !logPriceSubmitting && setLogPriceForm(null)}
+        >
+          <div
+            className="bg-[#16264A] border border-[#F2F0E6] rounded-sm max-w-sm w-full p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs uppercase tracking-widest text-[#93A3C4] flex items-center gap-1.5">
+                <Tag size={12} /> Log a price
+              </span>
+              <button
+                onClick={() => setLogPriceForm(null)}
+                disabled={logPriceSubmitting}
+                className="text-[#93A3C4] hover:text-[#F2F0E6] disabled:opacity-50"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div>
+                <label className="block text-[11px] uppercase tracking-widest text-[#93A3C4] mb-1">Item</label>
+                <input
+                  type="text"
+                  value={logPriceForm.item}
+                  onChange={(e) => updateLogPriceField("item", e.target.value)}
+                  placeholder="e.g. Basmati Rice"
+                  className="w-full border border-[#3D5178] rounded-sm px-2 py-1.5 bg-[#0F1E3D] outline-none focus:border-[#6B9E71]"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] uppercase tracking-widest text-[#93A3C4] mb-1">Category</label>
+                <input
+                  type="text"
+                  list="log-price-categories"
+                  value={logPriceForm.category}
+                  onChange={(e) => updateLogPriceField("category", e.target.value)}
+                  placeholder="e.g. Pantry"
+                  className="w-full border border-[#3D5178] rounded-sm px-2 py-1.5 bg-[#0F1E3D] outline-none focus:border-[#6B9E71]"
+                />
+                <datalist id="log-price-categories">
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-[11px] uppercase tracking-widest text-[#93A3C4] mb-1">Store</label>
+                <input
+                  type="text"
+                  list="log-price-stores"
+                  value={logPriceForm.store}
+                  onChange={(e) => updateLogPriceField("store", e.target.value)}
+                  placeholder="e.g. Costco"
+                  className="w-full border border-[#3D5178] rounded-sm px-2 py-1.5 bg-[#0F1E3D] outline-none focus:border-[#6B9E71]"
+                />
+                <datalist id="log-price-stores">
+                  {[...new Set(storeRows.map((s) => s.store).filter(Boolean))].map((s) => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-[11px] uppercase tracking-widest text-[#93A3C4] mb-1">Price</label>
+                <div className="flex items-center border border-[#3D5178] rounded-sm px-2 py-1.5 bg-[#0F1E3D]">
+                  <span className="text-[#B8C2D9] mr-1 font-mono-tab">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={logPriceForm.price}
+                    onChange={(e) => updateLogPriceField("price", e.target.value)}
+                    placeholder="0.00"
+                    className="w-full outline-none font-mono-tab bg-transparent"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={submitLogPrice}
+                disabled={logPriceSubmitting}
+                className="w-full mt-1 px-4 py-2 text-xs uppercase tracking-widest bg-[#3B6142] text-[#F2F0E6] rounded-sm hover:bg-[#2E4D34] disabled:opacity-50"
+              >
+                {logPriceSubmitting ? "Saving…" : "Save price"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showManageStores && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => setShowManageStores(false)}
+        >
+          <div
+            className="bg-[#16264A] border border-[#F2F0E6] rounded-sm max-w-md w-full p-4 max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs uppercase tracking-widest text-[#93A3C4] flex items-center gap-1.5">
+                <MapPin size={12} /> Manage stores
+              </span>
+              <button
+                onClick={() => setShowManageStores(false)}
+                className="text-[#93A3C4] hover:text-[#F2F0E6]"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {manageStoresMessage && (
+              <div
+                className={`border text-xs px-3 py-2 rounded-sm mb-3 ${
+                  manageStoresMessage.type === "success"
+                    ? "border-[#6B9E71] bg-[#1B2E1F] text-[#6B9E71]"
+                    : "border-[#E8756A] bg-[#3D1F1C] text-[#E8756A]"
+                }`}
+              >
+                {manageStoresMessage.text}
+              </div>
+            )}
+
+            {storeRows.length === 0 ? (
+              <div className="text-sm text-[#93A3C4]">No stores set up yet — add one in the Stores tab of the Sheet first.</div>
+            ) : (
+              <div className="space-y-3">
+                {storeRows.map((s) => (
+                  <div key={s.store} className="border border-[#3D5178] rounded-sm p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm">{s.store}</div>
+                        <div className="text-[11px] text-[#93A3C4]">
+                          {s.address || "No address on file"}
+                        </div>
+                        <div className="text-[11px] text-[#93A3C4] font-mono-tab">
+                          {s.lat && s.long ? `${Number(s.lat).toFixed(5)}, ${Number(s.long).toFixed(5)}` : "No coordinates yet"}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleUseMyLocation(s.store)}
+                        disabled={geoLoadingStore === s.store}
+                        className="shrink-0 text-[10px] uppercase tracking-widest font-bold text-[#0F1E3D] flex items-center gap-1 border border-[#6B9E71] rounded-full bg-[#6B9E71] hover:bg-[#7FB185] disabled:opacity-50 px-2.5 py-1.5 whitespace-nowrap"
+                      >
+                        {geoLoadingStore === s.store ? (
+                          <RefreshCw size={12} className="animate-spin" />
+                        ) : (
+                          <MapPin size={12} />
+                        )}
+                        Use my location
+                      </button>
+                    </div>
+                    {manualEntryStore === s.store && (
+                      <div className="mt-2.5 pt-2.5 border-t border-dashed border-[#3D5178] flex items-end gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] uppercase tracking-widest text-[#93A3C4] mb-1">Lat</label>
+                          <input
+                            type="number"
+                            step="any"
+                            value={manualCoords.lat}
+                            onChange={(e) => setManualCoords((c) => ({ ...c, lat: e.target.value }))}
+                            className="w-full border border-[#3D5178] rounded-sm px-2 py-1 bg-[#0F1E3D] outline-none focus:border-[#6B9E71] font-mono-tab text-xs"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[10px] uppercase tracking-widest text-[#93A3C4] mb-1">Long</label>
+                          <input
+                            type="number"
+                            step="any"
+                            value={manualCoords.long}
+                            onChange={(e) => setManualCoords((c) => ({ ...c, long: e.target.value }))}
+                            className="w-full border border-[#3D5178] rounded-sm px-2 py-1 bg-[#0F1E3D] outline-none focus:border-[#6B9E71] font-mono-tab text-xs"
+                          />
+                        </div>
+                        <button
+                          onClick={() => submitManualCoords(s.store)}
+                          className="text-[10px] uppercase tracking-widest px-2.5 py-1.5 border border-[#3D5178] rounded-sm hover:bg-[#1B2E52]"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

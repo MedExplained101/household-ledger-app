@@ -203,6 +203,52 @@
               },
               "renameOutput": true,
               "outputKey": "Voice"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "log_price",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "LogPrice"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "update_store_location",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "UpdateStoreLocation"
             }
           ]
         },
@@ -1380,6 +1426,435 @@
       "position": [1840, 1200],
       "id": "code-shape-voice-remove-body",
       "name": "Shape Voice Remove Body"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Catalog",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            { "lookupColumn": "item", "lookupValue": "={{ $json.body.item }}" },
+            { "lookupColumn": "store", "lookupValue": "={{ $json.body.store }}" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "alwaysOutputData": true,
+      "position": [720, 1400],
+      "id": "sheets-find-catalog-log-price",
+      "name": "Find Catalog Row for Log Price",
+      "notes": "Added 2026-08-15 for in-store price logging (Feature 1, handoff spec). Looks up an existing Catalog row for this exact item+store pair -- an in-store scan at a store the item has never been priced at before is a normal case (new row), not an error, so alwaysOutputData is set proactively (same class of gap as Find Row to Remove before it got alwaysOutputData).",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ String($json.row_number || \"\") }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-has-existing-catalog-row",
+      "name": "Has Existing Catalog Row?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [940, 1400],
+      "notes": "Same shape as Found Row to Remove? -- String(...) + || \"\" guards against both Google Sheets' numeric row_number under strict type validation and the alwaysOutputData placeholder's missing row_number key entirely."
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Catalog",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "price": "={{ $('List Webhook').first().json.body.price }}",
+            "last_updated": "={{ $now.format('yyyy-MM-dd') }}",
+            "confidence": "in-store-scan",
+            "barcode": "={{ $json.barcode || $('List Webhook').first().json.body.barcode || '' }}"
+          },
+          "matchingColumns": ["row_number"],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1160, 1320],
+      "id": "sheets-update-catalog-price",
+      "name": "Update Catalog Price",
+      "notes": "Human-confirmed in-store price bypasses the Price Refresh Agent's 24-48h freshness gate entirely -- writes straight to Catalog (design decision, handoff spec). unit_price/size/unit_label are deliberately left out of the mapping (not touched) since the scan-confirm form doesn't collect a pack size -- 'if computable' per spec, and it isn't here. barcode fills in only if this Catalog row didn't already have one (never overwrite, same convention as product_url/est_trip_cost).",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Catalog",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $('List Webhook').first().json.body.item }}",
+            "category": "={{ $('List Webhook').first().json.body.category }}",
+            "store": "={{ $('List Webhook').first().json.body.store }}",
+            "price": "={{ $('List Webhook').first().json.body.price }}",
+            "unit_price": "",
+            "size": "",
+            "unit_label": "",
+            "last_updated": "={{ $now.format('yyyy-MM-dd') }}",
+            "confidence": "in-store-scan",
+            "product_url": "",
+            "barcode": "={{ $('List Webhook').first().json.body.barcode }}"
+          },
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1160, 1480],
+      "id": "sheets-append-catalog-log-price",
+      "name": "Append New Catalog Row",
+      "notes": "No existing Catalog row for this item+store pair -- creates one, per the 'don't silently drop or guess' design decision. item/category are required in the request body (either auto-filled from an existing Catalog match at a different store, or user-entered) -- the frontend confirm form is responsible for never sending this action with a blank item/category.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "PriceLog",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "item": "={{ $('List Webhook').first().json.body.item }}",
+            "store": "={{ $('List Webhook').first().json.body.store }}",
+            "price": "={{ $('List Webhook').first().json.body.price }}",
+            "date": "={{ $now.format('yyyy-MM-dd') }}",
+            "status": "confirmed",
+            "scraped_at": "={{ $now.format('yyyy-MM-dd HH:mm') }}"
+          },
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1380, 1400],
+      "id": "sheets-append-pricelog",
+      "name": "Append to PriceLog",
+      "notes": "Historical record for both branches (existing item re-priced, or brand new item) -- converges here regardless of which Catalog write happened. status: 'confirmed' rather than reusing the Price Refresh Agent's 'pending' value, since a human read the shelf tag directly and this deliberately skips that agent's freshness gate (design decision, handoff spec).",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('List Webhook').first().json.body;\nreturn [{ json: { ok: true, item: body.item, store: body.store, price: body.price } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1600, 1400],
+      "id": "code-format-log-price-response",
+      "name": "Format Log Price Response"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [1820, 1400],
+      "id": "respond-log-price",
+      "name": "Return Log Price Confirmation",
+      "notes": "Dedicated response rather than routing back through Get Current List/Get Settings/Compute Totals -- this action never touches ShoppingList, so there's nothing list-shaped to return, and a small standalone confirmation is less code than threading a no-op through the shared multi-tab response path."
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            { "lookupColumn": "store", "lookupValue": "={{ $json.body.store }}" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "alwaysOutputData": true,
+      "position": [720, 1700],
+      "id": "sheets-find-store-row",
+      "name": "Find Store Row",
+      "notes": "Added 2026-08-15 for auto-geolocated store setup (Feature 2, handoff spec). alwaysOutputData so an unrecognized store name passes through as an empty placeholder instead of halting the branch -- Store Row Found? right after turns that into a clean error response instead of creating a new Stores row implicitly.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ String($json.row_number || \"\") }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-store-row-found",
+      "name": "Store Row Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [940, 1700],
+      "notes": "False branch means an unknown store name -- deliberately does not create a new Stores row from a location ping (design decision, handoff spec: new stores go through explicit setup, not implicitly via geolocation)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('List Webhook').first().json.body;\nreturn [{ json: { ok: false, error: 'unknown store', store: body.store } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 1620],
+      "id": "code-format-store-not-found",
+      "name": "Format Store Not Found Error"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [1380, 1620],
+      "id": "respond-store-not-found",
+      "name": "Return Store Location Error"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ String($json.address || \"\") }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-has-address-already",
+      "name": "Has Address Already?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1160, 1780],
+      "notes": "True (address already on file) skips the Geocoding API call entirely -- respects the 'never overwrite' rule and saves an API call (design decision, handoff spec). False (blank address) triggers a best-effort reverse-geocode."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://maps.googleapis.com/maps/api/geocode/json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "latlng", "value": "={{ $('List Webhook').first().json.body.lat }},{{ $('List Webhook').first().json.body.long }}" }
+          ]
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [1380, 1860],
+      "id": "http-reverse-geocode",
+      "name": "Reverse Geocode Location",
+      "notes": "SETUP TODO: credential ID below is still a placeholder -- per the handoff spec's ground-truth notes, TODO.md says the real Google Maps credential was wired live 2026-08-01 as an httpQueryAuth credential named 'Google Maps Distance Matrix API Key (Household Ledger)' for the Recommendation Agent, but that workflow's own checked-in JSON still shows the same placeholder, so this could not be confirmed from the repo alone -- get the real credential ID from n8n directly, and confirm the Geocoding API (not just Distance Matrix) is enabled on the same GCP project, it may need enabling separately. onError: continueRegularOutput so a geocode failure (API not enabled, quota, bad coords) never blocks lat/long from saving -- that's the core ask; the address is explicitly a nice-to-have per the design decision.",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "REPLACE_WITH_GOOGLE_MAPS_CREDENTIAL_ID",
+          "name": "Google Maps Distance Matrix API Key (Household Ledger)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let address = null;\ntry {\n  const data = $input.first().json;\n  if (data && data.status === 'OK' && Array.isArray(data.results) && data.results.length > 0) {\n    address = data.results[0].formatted_address || null;\n  }\n} catch (e) {\n  address = null;\n}\nreturn [{ json: { address } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1600, 1860],
+      "id": "code-parse-geocode-result",
+      "name": "Parse Geocode Result",
+      "notes": "Defaults to null on anything other than a clean OK response (API disabled, no results, onError passthrough from Reverse Geocode Location) rather than throwing -- a failed reverse-geocode should never take down the lat/long save."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reached from either Has Address Already? branch -- Parse Geocode Result only\n// ran on the false (needs-geocode) path, so it's read via a named reference\n// wrapped in try/catch (same 'may or may not have run' pattern Compute Totals\n// already uses for Validate Voice Command).\nconst body = $('List Webhook').first().json.body;\nconst storeRow = $('Find Store Row').first().json;\nlet geocodedAddress = null;\ntry {\n  geocodedAddress = $('Parse Geocode Result').first().json.address || null;\n} catch (e) {\n  geocodedAddress = null;\n}\nreturn [{ json: {\n  row_number: storeRow.row_number,\n  store: body.store,\n  lat: body.lat,\n  long: body.long,\n  address: geocodedAddress || storeRow.address || ''\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1820, 1780],
+      "id": "code-prepare-store-update",
+      "name": "Prepare Store Update",
+      "notes": "address resolves to: a freshly reverse-geocoded value (blank-address path succeeded), else the store's existing address unchanged (blank-address path found nothing, or the address was already on file). Either way the write below never actually overwrites a real address with something different -- enforces the 'never overwrite' rule in the mapping itself rather than in prose."
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "lat": "={{ $json.lat }}",
+            "long": "={{ $json.long }}",
+            "address": "={{ $json.address }}"
+          },
+          "matchingColumns": ["row_number"],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [2040, 1780],
+      "id": "sheets-update-store-row",
+      "name": "Update Store Row",
+      "notes": "Raw coordinates always get saved when the user taps 'Use my location' -- no validation against the store's claimed address, there's no reliable way to check that server-side (design decision, handoff spec: trust the human standing there).",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nreturn [{ json: { ok: true, store: d.store, lat: d.lat, long: d.long, address: d.address } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2260, 1780],
+      "id": "code-format-store-location-response",
+      "name": "Format Store Location Response"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [2480, 1780],
+      "id": "respond-store-location",
+      "name": "Return Store Location Confirmation"
     }
   ],
   "connections": {
@@ -1451,6 +1926,20 @@
         [
           {
             "node": "Get Catalog for Voice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find Catalog Row for Log Price",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find Store Row",
             "type": "main",
             "index": 0
           }
@@ -1854,6 +2343,120 @@
       "main": [
         [
           { "node": "Find Row to Remove", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Find Catalog Row for Log Price": {
+      "main": [
+        [
+          { "node": "Has Existing Catalog Row?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Has Existing Catalog Row?": {
+      "main": [
+        [
+          { "node": "Update Catalog Price", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Append New Catalog Row", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Update Catalog Price": {
+      "main": [
+        [
+          { "node": "Append to PriceLog", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Append New Catalog Row": {
+      "main": [
+        [
+          { "node": "Append to PriceLog", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Append to PriceLog": {
+      "main": [
+        [
+          { "node": "Format Log Price Response", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Format Log Price Response": {
+      "main": [
+        [
+          { "node": "Return Log Price Confirmation", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Find Store Row": {
+      "main": [
+        [
+          { "node": "Store Row Found?", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Store Row Found?": {
+      "main": [
+        [
+          { "node": "Has Address Already?", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Format Store Not Found Error", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Format Store Not Found Error": {
+      "main": [
+        [
+          { "node": "Return Store Location Error", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Has Address Already?": {
+      "main": [
+        [
+          { "node": "Prepare Store Update", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Reverse Geocode Location", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Reverse Geocode Location": {
+      "main": [
+        [
+          { "node": "Parse Geocode Result", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse Geocode Result": {
+      "main": [
+        [
+          { "node": "Prepare Store Update", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Prepare Store Update": {
+      "main": [
+        [
+          { "node": "Update Store Row", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Update Store Row": {
+      "main": [
+        [
+          { "node": "Format Store Location Response", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Format Store Location Response": {
+      "main": [
+        [
+          { "node": "Return Store Location Confirmation", "type": "main", "index": 0 }
         ]
       ]
     }
