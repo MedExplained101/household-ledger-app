@@ -531,7 +531,7 @@ export default function HouseholdLedger() {
         setGeoSavingStore(null);
         const text =
           err.code === err.PERMISSION_DENIED
-            ? "Location permission denied — enter lat/long manually below if needed."
+            ? "Location permission denied — allow location access in your browser settings and try again."
             : "Couldn't get your location — try again.";
         setGeoMessages((m) => ({ ...m, [storeName]: { type: "error", text } }));
       },
