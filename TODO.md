@@ -336,4 +336,20 @@ Not yet reverified end-to-end after this third round of fixes on this feature �
 **Not yet built**: the actual reverse-geocode chain itself (an HTTP call to the Geocoding API from within `update_store_location`'s node chain, writing the resolved `address` back to the `Stores` row — never overwriting a manually-entered address, per the original handoff's rule). This is now unblocked and ready to scaffold/wire whenever picked up next.
 
 ---
+
+## Session log — 2026-08-15 (continued further still still): `update_store_location` v2 (reverse-geocode) scaffolded, not yet live
+
+**Scaffolded the reverse-geocode-to-`address` step in the checked-in JSON**, same "scaffold in repo, apply live carefully in a dedicated session" pattern used throughout this project (Clear All/Finalize/Recall, `log_price`, `update_store_location` v1 itself). Not applied live yet.
+
+Design: `Store Row Found?`'s true branch now fans out to `Update Store Row` (unchanged, lat/long only) **and** a new address-resolution branch, gated so the reverse-geocode call only ever fires when `Stores.address` is genuinely blank:
+
+`Has Existing Address?` (IF, checks `Find Store Row`'s `address`) → true: `Keep Existing Address` (pass through unchanged) / false: `Reverse Geocode via Google Maps` (HTTP GET to the Geocoding API, reusing the same Query Auth credential already confirmed live for the Recommendation Agent's Distance Matrix calls — `jGUkE00XLHIOjbD4` — since the whole Maps Platform suite, Geocoding included, is enabled under one key on that GCP project; `onError: continueRegularOutput` so a failed/zero-result geocode just leaves `address` blank rather than failing the whole action) → `Parse Geocode Result` (Code, extracts `results[0].formatted_address` or `null`) → `Geocode Succeeded?` (IF) → true: `Update Store Address` (Sheets update, writes only `row_number`/`address`, matched on `row_number` — safe to run in parallel with `Update Store Row` since neither touches the other's columns) / false: skip straight to the response. All three end states (`Keep Existing Address`, `Update Store Address`, or `Geocode Succeeded?`'s false branch) converge on the existing `Format Update Store Location Response`, whose code was updated to read `$json.address` (whichever of the three actually fed it this run) instead of always echoing `Find Store Row`'s pre-write snapshot.
+
+Six new nodes total (`Has Existing Address?`, `Keep Existing Address`, `Reverse Geocode via Google Maps`, `Parse Geocode Result`, `Geocode Succeeded?`, `Update Store Address`), validated structurally via PowerShell `ConvertFrom-Json` (66 nodes total, no duplicate names/IDs, every connection target resolves to a real node name) — same check used for every prior feature added this way.
+
+**Flagged, not a blocker**: the reused credential's display name, "Google Distance Matrix API," is now a little misleading since it backs two different Google APIs (Distance Matrix and Geocoding) — worth a rename live for clarity next time someone's in that credential's settings, purely cosmetic.
+
+**Not yet done**: applying the new IF/Code/HTTP/Sheets nodes to the live n8n workflow; live end-to-end test (address already set on a store → confirm it's left untouched; address blank → confirm a real address gets written; a deliberately bad lat/long → confirm graceful no-op instead of an error); merging the still-unmerged frontend "Manage stores" modal to `main` (unrelated gap, noted repeatedly above — the modal itself has been live since the 2026-08-15 merge, this is about a different, smaller frontend gap: nothing in the UI surfaces the resolved `address` yet, since v1 never returned one).
+
+---
 *Add new items here as they come up, and check them off (or link a GitHub issue) as they're resolved — this keeps the doc useful instead of stale.*

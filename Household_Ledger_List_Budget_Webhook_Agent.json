@@ -2002,7 +2002,7 @@
       "position": [1168, 1600],
       "id": "sheets-update-store-row",
       "name": "Update Store Row",
-      "notes": "v1: writes lat/long only. Deliberately does NOT touch address -- the optional reverse-geocode step (Geocoding API call to fill address when blank) is scaffolded as a documented follow-up in TODO.md rather than built here, since the live Google Maps credential ID and whether the Geocoding API (as opposed to just Distance Matrix, already used by the Recommendation Agent) is enabled on that GCP project couldn't be verified this session -- flagged as genuinely uncertain rather than guessed. This satisfies the spec's own 'never overwrite a manually-entered address' rule trivially, by not writing to that column at all yet.",
+      "notes": "Writes lat/long only. Runs in parallel with the address-resolution branch below (Has Existing Address? onward) -- that branch is what actually fills address in, gated so it only ever runs when the column was genuinely blank, per the spec's 'never overwrite a manually-entered address' rule.",
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "zz9INbfV79dYEmQl",
@@ -2012,14 +2012,167 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $('List Webhook').first().json.body;\nconst row = $('Find Store Row').first().json;\nreturn [{ json: { ok: true, store: body.store, lat: body.lat, long: body.long, address: row.address || null } }];"
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Find Store Row').first().json.address ? \"has\" : \"missing\" }}",
+              "rightValue": "has",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-has-existing-address",
+      "name": "Has Existing Address?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1168, 1900],
+      "notes": "Added 2026-08-15 (v2 scaffold, not yet applied live) once the Geocoding API was confirmed enabled on the project's Google Cloud project. Gates the whole reverse-geocode branch below on address already being blank -- structurally guarantees 'never overwrite a manually-entered address' rather than relying on the geocode call itself to be careful. Same ternary-to-string pattern as Has Existing Catalog Row? (log_price branch, fixed earlier the same day) instead of a bare not-equals-empty-string check, since that exact shape silently misbehaved on an unset value that day."
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $('Find Store Row').first().json;\nreturn [{ json: { address: row.address } }];"
+      },
+      "id": "code-keep-existing-address",
+      "name": "Keep Existing Address",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1392, 1840],
+      "notes": "True branch of Has Existing Address? -- address already on file, pass it through unchanged rather than re-geocoding it."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://maps.googleapis.com/maps/api/geocode/json?latlng={{ $('List Webhook').first().json.body.lat }},{{ $('List Webhook').first().json.body.long }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "onError": "continueRegularOutput",
+      "position": [1392, 1960],
+      "id": "http-reverse-geocode-address",
+      "name": "Reverse Geocode via Google Maps",
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "jGUkE00XLHIOjbD4",
+          "name": "Google Distance Matrix API"
+        }
+      },
+      "notes": "Reuses the same Query Auth credential already confirmed live for the Recommendation Agent's Distance Matrix calls (id jGUkE00XLHIOjbD4 -- holds the shared Google Maps Platform API key as query param 'key'). Geocoding API confirmed enabled on the same GCP project 2026-08-15, so no new credential is needed -- but its display name ('Google Distance Matrix API') is now a little misleading since it backs two different APIs; worth a rename live for clarity, not a blocker. onError: continueRegularOutput so a geocode failure (bad coordinates, API hiccup) degrades to a blank address instead of failing update_store_location entirely -- lat/long, the primary ask, are already written by the parallel Update Store Row branch regardless of how this branch goes."
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $json;\nlet address = null;\nif (res && res.status === 'OK' && Array.isArray(res.results) && res.results.length > 0) {\n  address = res.results[0].formatted_address || null;\n}\nreturn [{ json: { address } }];"
+      },
+      "id": "code-parse-geocode-address-result",
+      "name": "Parse Geocode Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1616, 1960],
+      "notes": "A non-OK status (ZERO_RESULTS, INVALID_REQUEST, etc.) or the onError continue-output shape from the HTTP node above both fall through to address: null here -- same non-throwing degrade-gracefully behavior as the Recommendation Agent's own Parse Distance + Est Trip Cost node."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.address ? \"found\" : \"notfound\" }}",
+              "rightValue": "found",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-geocode-address-succeeded",
+      "name": "Geocode Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1840, 1960],
+      "notes": "False branch (geocode failed or returned no results) skips the sheet write and goes straight to Format Update Store Location Response -- address just stays blank for this run, same as if the geocode branch hadn't fired at all."
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Find Store Row').first().json.row_number }}",
+            "address": "={{ $json.address }}"
+          },
+          "matchingColumns": ["row_number"],
+          "schema": [
+            { "id": "row_number", "displayName": "row_number", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "store", "displayName": "store", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "address", "displayName": "address", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "lat", "displayName": "lat", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "long", "displayName": "long", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "distance_from_home_mi", "displayName": "distance_from_home_mi", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "est_trip_cost", "displayName": "est_trip_cost", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "channel", "displayName": "channel", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "delivery_fee", "displayName": "delivery_fee", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [2064, 1920],
+      "id": "sheets-update-store-address",
+      "name": "Update Store Address",
+      "notes": "Writes only row_number/address (matched on row_number, same as Update Store Row) -- doesn't touch lat/long, so this can run in parallel with Update Store Row without either clobbering the other's columns. row_number is pulled by name from Find Store Row since $json at this point is Parse Geocode Result's output, not the sheet row.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('List Webhook').first().json.body;\nreturn [{ json: { ok: true, store: body.store, lat: body.lat, long: body.long, address: $json.address || null } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1392, 1600],
       "id": "code-format-update-store-location-response",
       "name": "Format Update Store Location Response",
-      "notes": "address is passed through unchanged from the row Find Store Row already read -- this v1 never writes address, so this just reports whatever was already there (often blank)."
+      "notes": "address now reflects the real result of the address-resolution branch (Keep Existing Address / Update Store Address / a failed Geocode Succeeded?) via $json, rather than always echoing Find Store Row's original pre-write snapshot -- whichever of those three nodes actually fed this node's input this run determines the value. lat/long are still echoed straight from the request body, matching Update Store Row's write."
     },
     {
       "parameters": {
@@ -2338,7 +2491,7 @@
             "index": 0
           },
           {
-            "node": "Format Update Store Location Response",
+            "node": "Has Existing Address?",
             "type": "main",
             "index": 0
           }
@@ -2346,6 +2499,86 @@
         [
           {
             "node": "Store Not Found Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Existing Address?": {
+      "main": [
+        [
+          {
+            "node": "Keep Existing Address",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reverse Geocode via Google Maps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep Existing Address": {
+      "main": [
+        [
+          {
+            "node": "Format Update Store Location Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reverse Geocode via Google Maps": {
+      "main": [
+        [
+          {
+            "node": "Parse Geocode Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Geocode Result": {
+      "main": [
+        [
+          {
+            "node": "Geocode Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Geocode Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Update Store Address",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Update Store Location Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Store Address": {
+      "main": [
+        [
+          {
+            "node": "Format Update Store Location Response",
             "type": "main",
             "index": 0
           }
