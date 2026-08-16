@@ -173,6 +173,9 @@ export default function HouseholdLedger() {
   const [geoMessages, setGeoMessages] = useState({});
   const [confirmingGeoStore, setConfirmingGeoStore] = useState(null);
   const confirmGeoTimeout = useRef(null);
+  const [newStoreName, setNewStoreName] = useState("");
+  const [addingStore, setAddingStore] = useState(false);
+  const [addStoreMessage, setAddStoreMessage] = useState(null);
 
   // Maps a ShoppingList row from the sheet back into the shape the UI expects,
   // reattaching the matching CATALOG entry so stores/notes/sizeUnknown still work.
@@ -205,7 +208,8 @@ export default function HouseholdLedger() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`Webhook returned ${res.status}`);
+    // Error responses (404, 409, ...) still carry a real {ok:false, error} JSON body --
+    // callers branch on that, not on HTTP status, so don't throw here and swallow it.
     return res.json();
   }, []);
 
@@ -552,6 +556,27 @@ export default function HouseholdLedger() {
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
+  }
+
+  // Creates a brand-new Stores row so it can then be geolocated with "Use my location".
+  async function addNewStore() {
+    const name = newStoreName.trim();
+    if (!name || addingStore) return;
+    setAddingStore(true);
+    setAddStoreMessage(null);
+    try {
+      const data = await callWebhook({ action: "add_store", store: name });
+      if (data.ok) {
+        setStoreRows((rows) => [...rows, { store: name, address: "", lat: "", long: "" }]);
+        setNewStoreName("");
+      } else {
+        setAddStoreMessage({ type: "error", text: data.error === `Store already exists: ${name}` ? "That store already exists." : "Couldn't add that store — try again." });
+      }
+    } catch {
+      setAddStoreMessage({ type: "error", text: "Couldn't reach the server — try again." });
+    } finally {
+      setAddingStore(false);
+    }
   }
 
   async function addItem(item) {
@@ -1506,6 +1531,31 @@ export default function HouseholdLedger() {
               <button onClick={() => setShowManageStores(false)} className="text-[#93A3C4] hover:text-[#F2F0E6]">
                 <X size={16} />
               </button>
+            </div>
+            <div className="mb-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newStoreName}
+                  onChange={(e) => setNewStoreName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && addNewStore()}
+                  placeholder="New store name"
+                  className="flex-1 min-w-0 bg-[#0F1E3D] border border-[#3D5178] rounded-sm px-2.5 py-1.5 text-sm placeholder:text-[#93A3C4] focus:outline-none focus:border-[#6B9E71]"
+                />
+                <button
+                  onClick={addNewStore}
+                  disabled={!newStoreName.trim() || addingStore}
+                  className="shrink-0 text-xs uppercase tracking-widest font-bold flex items-center gap-1 rounded-sm disabled:opacity-50 px-3 py-1.5 text-[#0F1E3D] border border-[#6B9E71] bg-[#6B9E71] hover:bg-[#7FB185]"
+                >
+                  {addingStore ? <RefreshCw size={12} className="animate-spin" /> : <Plus size={12} />}
+                  Add
+                </button>
+              </div>
+              {addStoreMessage && (
+                <div className={`mt-1 text-xs ${addStoreMessage.type === "success" ? "text-[#6B9E71]" : "text-[#E8756A]"}`}>
+                  {addStoreMessage.text}
+                </div>
+              )}
             </div>
             {storeRows.length === 0 ? (
               <div className="text-sm text-[#93A3C4]">No stores found yet.</div>
