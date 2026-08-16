@@ -891,7 +891,7 @@ export default function HouseholdLedger() {
             </div>
             <button
               onClick={() => setShowManageStores(true)}
-              className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs uppercase tracking-widest text-[#B8C2D9] border border-[#3D5178] rounded-sm px-3 py-1.5 hover:bg-[#1B2E52] hover:text-[#F2F0E6] hover:border-[#6B9E71] transition-colors"
+              className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs uppercase tracking-widest font-bold text-[#0F1E3D] border border-[#6B9E71] rounded-sm bg-[#6B9E71] hover:bg-[#7FB185] px-3 py-1.5 transition-colors"
             >
               <MapPin size={12} /> Manage stores
             </button>
