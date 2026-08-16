@@ -21,7 +21,15 @@ No install needed — it works in your phone or computer's browser. On a phone, 
 1. **Tap to add** — browse or search the catalog and tap an item.
 2. **🎤 Speak** — tap the pill, say something like *"add milk"*, *"remove eggs"*, *"clear the list"*, *"save the list"*, or *"what's the price of eggs?"*. The app listens once per tap and shows what it heard.
 3. **📷 Receipt** — snap a photo or upload a PDF of a Costco/Walmart receipt. It reads the items and prices and logs them straight into the catalog — no typing.
-4. **📷 Barcode** — scan a product's barcode with your camera. If it's something already in your catalog, you get an instant, trusted price comparison across stores. If not, the app tries a quick web lookup and clearly labels that result as unverified (see "What it can't do" below). Either way, this is just a lookup — it doesn't add anything to your list for you.
+4. **📷 Barcode** — scan a product's barcode with your camera. Tapping the button first asks what you're doing:
+   - **Add to list** — the original behavior. If it's something already in your catalog, you get an instant, trusted price comparison across stores. If not, the app tries a quick web lookup and clearly labels that result as unverified (see "What it can't do" below). Either way, this is just a lookup — it doesn't add anything to your list for you.
+   - **Log price only** — for standing in the aisle and recording what something actually costs *right now* at *this* store, without touching your current list. Scan the barcode, confirm the item name (prefilled if it matches something you've scanned before, but the price is always left blank — you type in exactly what's on the shelf), pick the store, and save. That price goes straight into the catalog as a fresh, human-confirmed reading, which future price comparisons treat as more trustworthy than an old receipt scan.
+
+## Setting up store locations
+
+**Manage stores** (green button, left sidebar, under your budget) lets you save each store's exact location. Open it, find the store, and tap **Use my location** while you're standing there (or near there) — the app uses your phone's GPS to save that store's coordinates and, where possible, its street address. This is a one-time setup per store, not something you do every trip; it just makes the app's distance-based math (is a farther bulk-price store actually worth the drive) more accurate over time.
+
+If your browser blocks location access, it'll tell you so — go into your browser's settings and allow location for this site, then try again.
 
 ## Managing your list
 
