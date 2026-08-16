@@ -171,6 +171,8 @@ export default function HouseholdLedger() {
   const [showManageStores, setShowManageStores] = useState(false);
   const [geoSavingStore, setGeoSavingStore] = useState(null);
   const [geoMessages, setGeoMessages] = useState({});
+  const [confirmingGeoStore, setConfirmingGeoStore] = useState(null);
+  const confirmGeoTimeout = useRef(null);
 
   // Maps a ShoppingList row from the sheet back into the shape the UI expects,
   // reattaching the matching CATALOG entry so stores/notes/sizeUnknown still work.
@@ -497,7 +499,20 @@ export default function HouseholdLedger() {
   }
 
   // Manage stores: fills Stores.lat/long from the phone's current GPS position.
+  // If the store already has saved coordinates, require a second tap first --
+  // same "tap again to confirm" pattern as Clear All -- so an accidental tap
+  // can't silently overwrite a location that was already recorded correctly.
   async function useMyLocationForStore(storeName) {
+    const store = storeRows.find((r) => r.store === storeName);
+    const hasExistingCoords = store?.lat && store?.long;
+    if (hasExistingCoords && confirmingGeoStore !== storeName) {
+      setConfirmingGeoStore(storeName);
+      clearTimeout(confirmGeoTimeout.current);
+      confirmGeoTimeout.current = setTimeout(() => setConfirmingGeoStore(null), 3000);
+      return;
+    }
+    clearTimeout(confirmGeoTimeout.current);
+    setConfirmingGeoStore(null);
     setGeoMessages((m) => ({ ...m, [storeName]: null }));
     if (!navigator.geolocation) {
       setGeoMessages((m) => ({ ...m, [storeName]: { type: "error", text: "Geolocation isn't supported in this browser — enter lat/long manually." } }));
@@ -1508,14 +1523,20 @@ export default function HouseholdLedger() {
                       <button
                         onClick={() => useMyLocationForStore(s.store)}
                         disabled={geoSavingStore === s.store}
-                        className="shrink-0 text-[10px] uppercase tracking-widest font-bold text-[#0F1E3D] flex items-center gap-1 border border-[#6B9E71] rounded-full bg-[#6B9E71] hover:bg-[#7FB185] disabled:opacity-50 px-2.5 py-1.5 whitespace-nowrap"
+                        className={`shrink-0 text-[10px] uppercase tracking-widest font-bold flex items-center gap-1 rounded-full disabled:opacity-50 px-2.5 py-1.5 whitespace-nowrap ${
+                          confirmingGeoStore === s.store
+                            ? "text-[#F2F0E6] border border-[#E8756A] bg-[#E8756A] hover:opacity-90"
+                            : "text-[#0F1E3D] border border-[#6B9E71] bg-[#6B9E71] hover:bg-[#7FB185]"
+                        }`}
                       >
                         {geoSavingStore === s.store ? (
                           <RefreshCw size={12} className="animate-spin" />
+                        ) : confirmingGeoStore === s.store ? (
+                          <AlertTriangle size={12} />
                         ) : (
                           <MapPin size={12} />
                         )}
-                        Use my location
+                        {confirmingGeoStore === s.store ? "Overwrite location?" : "Use my location"}
                       </button>
                     </div>
                     {geoMessages[s.store] && (
