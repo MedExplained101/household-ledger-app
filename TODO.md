@@ -329,6 +329,7 @@ Not yet reverified end-to-end after this third round of fixes on this feature �
 **This closes out the "resync checked-in JSON with live drift" item** flagged repeatedly across today's earlier entries — the checked-in file should now match the live workflow for all 11 actions.
 
 ---
+
 ## Session log — 2026-08-15 (continued further still still): Geocoding API confirmed enabled
 
 **Resolved the last open unknown blocking `update_store_location`'s v2 (reverse-geocode-to-`address`) scope.** Checked the `HomeManager` Google Cloud project's Maps Platform "APIs & Services" page directly (console.cloud.google.com), filtering by Status: the "Disabled" filter returns zero results and "Enabled" returns the full product list — **every Maps Platform API, including Geocoding API, is enabled** on this project (not enabled API-by-API; looks like the whole suite was turned on together). This was the one fact blocking Feature 2's v2 scope (see the 2026-08-15 entries above) — the Google Maps credential ID was already confirmed (`jGUkE00XLHIOjbD4`, "Google Distance Matrix API", Query Auth), and now Geocoding API access is confirmed too.
@@ -350,6 +351,25 @@ Six new nodes total (`Has Existing Address?`, `Keep Existing Address`, `Reverse 
 **Flagged, not a blocker**: the reused credential's display name, "Google Distance Matrix API," is now a little misleading since it backs two different Google APIs (Distance Matrix and Geocoding) — worth a rename live for clarity next time someone's in that credential's settings, purely cosmetic.
 
 **Not yet done**: applying the new IF/Code/HTTP/Sheets nodes to the live n8n workflow; live end-to-end test (address already set on a store → confirm it's left untouched; address blank → confirm a real address gets written; a deliberately bad lat/long → confirm graceful no-op instead of an error); merging the still-unmerged frontend "Manage stores" modal to `main` (unrelated gap, noted repeatedly above — the modal itself has been live since the 2026-08-15 merge, this is about a different, smaller frontend gap: nothing in the UI surfaces the resolved `address` yet, since v1 never returned one).
+
+---
+
+## Session log — 2026-08-15 (continued once more): `update_store_location` v2 applied live, confirmed end-to-end
+
+**Applied the scaffolded reverse-geocode nodes to the live n8n workflow.** Built all 6 new nodes by hand on the canvas (drag-from-output-port → search-node-type → configure → rename, same technique as `update_store_location` v1) and wired the connections: `Store Row Found?` true → `Has Existing Address?` (added alongside the existing `Update Store Row` connection); `Has Existing Address?` true → `Keep Existing Address` → `Format Update Store Location Response`; false → `Reverse Geocode via Google Maps` → `Parse Geocode Result` → `Geocode Succeeded?` → true: `Update Store Address` → `Format...` / false: straight to `Format...`. Deleted the old direct v1 edge (`Store Row Found?` true → `Format Update Store Location Response`) since the response now only comes from the address-resolution branch. Verified the full connection graph programmatically (reading each edge's real node-ID pairs, not just eyeballing the canvas) before publishing — matched the intended design exactly, 66 nodes total, no duplicates.
+
+**Real bug found during live testing, distinct from anything flagged in the scaffold: `Format Update Store Location Response`'s own code was never updated.** The node already existed on the canvas from the v1 build and I only added new connections *into* it — I didn't realize its `jsCode` parameter still had the old v1 body (`address: row.address || null`, reading `Find Store Row`'s pre-write snapshot) instead of the v2 code the repo scaffold specified (`address: $json.address || null`, reading whichever branch actually fed it). First test (`Costco`, existing address) passed anyway since `row.address` and the real address happened to agree. Second test (`Amazon`, blank address) exposed it: the webhook response reported `address: null` even though the Sheet write underneath was actually correct (confirmed by reading the live `Stores` tab directly — `Amazon` really did get the real geocoded address written to it, the bug was purely in what the response echoed back). Fixed by opening the node in the Editor and replacing its code with the exact v2 version already specified in the repo file; republished; re-tested `Amazon` — response now correctly returns `"address":"2855 Jordan Ct, Alpharetta, GA 30004, USA"`. No repo changes were needed for this fix since the checked-in JSON already had the correct v2 code — this was purely a live node lagging behind the scaffold it was supposed to match.
+
+**Confirmed live end-to-end, all three cases:**
+- Existing address (`Costco`) → address unchanged, exactly as before: `{"ok":true,"store":"Costco",...,"address":"2855 Jordan Ct, Alpharetta, GA 30004"}`.
+- Blank address (`Amazon`, temporarily used as a real store with a genuinely blank address) → real reverse-geocoded address written and returned: `{"ok":true,"store":"Amazon",...,"address":"2855 Jordan Ct, Alpharetta, GA 30004, USA"}`.
+- Unknown store name → clean 404, unchanged from v1: `{"ok":false,"error":"Store not found: ..."}`.
+
+Test data cleanup: `Amazon`'s `address`/`lat`/`long` were cleared back to blank (its correct state — online-only channel, no physical location) immediately after both test runs, verified via direct Sheet read. No stray rows left behind.
+
+**One real, unresolved oddity flagged for later, not blocking this feature**: two attempts to test the blank-address path against a *brand-new* test store row (`"TEST STORE - delete me"`, then a plainer `"ZZTESTSTORE"` to rule out punctuation/autocorrect issues) both got `404 Store not found`, even though the row was confirmed present and correctly spelled in the live Sheet by direct inspection. Falling back to `Amazon` (an existing row that happened to have a blank address) worked immediately. This suggests `Find Store Row`'s filter lookup may not see rows appended *within the same session* reliably — worth a closer look if a real new-store-setup flow ever needs to geolocate a store the moment it's added, but doesn't affect the realistic case (geolocating a store that's already been sitting in the `Stores` tab, which is what this feature is actually for).
+
+**This closes out `update_store_location` v2 — the reverse-geocode-to-`address` step is now fully live and confirmed**, alongside v1's lat/long capture. Both pieces of the 2026-08-15 handoff (`log_price` and `update_store_location`, v1 and v2) are done.
 
 ---
 *Add new items here as they come up, and check them off (or link a GitHub issue) as they're resolved — this keeps the doc useful instead of stale.*
