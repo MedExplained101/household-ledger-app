@@ -27,7 +27,11 @@ No install needed — it works in your phone or computer's browser. On a phone, 
 
 ## Setting up store locations
 
-**Manage stores** (green button, left sidebar, under your budget) lets you save each store's exact location. Open it, find the store, and tap **Use my location** while you're standing there (or near there) — the app uses your phone's GPS to save that store's coordinates and, where possible, its street address. This is a one-time setup per store, not something you do every trip; it just makes the app's distance-based math (is a farther bulk-price store actually worth the drive) more accurate over time.
+**Manage stores** (green button, left sidebar, under your budget) lets you save each store's exact location.
+
+- **Adding a new store** — type its name into the box at the top and tap **Add**. It shows up in the list right away with "No location saved yet."
+- **Saving a location** — find the store and tap **Use my location** while you're standing there (or near there) — the app uses your phone's GPS to save that store's coordinates and, where possible, its street address. This is a one-time setup per store, not something you do every trip; it just makes the app's distance-based math (is a farther bulk-price store actually worth the drive) more accurate over time.
+- **Overwriting a saved location** — if a store already has coordinates saved and you tap **Use my location** again, the button first asks **Overwrite location?** — tap it a second time within a few seconds to confirm. This guards against fat-fingering the button and accidentally erasing a location that was already recorded correctly.
 
 If your browser blocks location access, it'll tell you so — go into your browser's settings and allow location for this site, then try again.
 
