@@ -295,6 +295,29 @@
               },
               "renameOutput": true,
               "outputKey": "UpdateStoreLocation"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "add_store",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "AddStore"
             }
           ]
         },
@@ -2183,6 +2206,159 @@
       "position": [1616, 1600],
       "id": "respond-update-store-location",
       "name": "Update Store Location Response"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "store",
+              "lookupValue": "={{ $json.body.store }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "alwaysOutputData": true,
+      "position": [720, 2140],
+      "id": "sheets-find-store-row-for-add",
+      "name": "Find Store Row for Add",
+      "notes": "Add a new store (added 2026-08-16). Filters Stores on store name to check for a duplicate before appending -- same alwaysOutputData reasoning as Find Store Row: a genuine no-match (the normal, expected case -- this store doesn't exist yet) shouldn't halt the branch.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.row_number ? \"found\" : \"notfound\" }}",
+              "rightValue": "found",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "if-store-already-exists",
+      "name": "Store Already Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [944, 2140],
+      "notes": "Same ternary-to-string pattern as Has Existing Catalog Row?/Geocode Succeeded? (both fixed live 2026-08-15 after the bare String(...||\"\") pattern misbehaved on unset values that day) -- used here from the start rather than repeating that lesson. True: a store with this exact name already has a row -- reject rather than silently creating a duplicate. False: genuinely new store name, safe to append."
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('List Webhook').first().json.body;\nreturn [{ json: { ok: false, error: `Store already exists: ${body.store}` } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1168, 2220],
+      "id": "code-store-already-exists-error",
+      "name": "Store Already Exists Error"
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [1392, 2220],
+      "id": "respond-add-store-error",
+      "name": "Add Store Error Response"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Stores",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "store": "={{ $('List Webhook').first().json.body.store }}",
+            "channel": "in-store"
+          },
+          "matchingColumns": ["store"],
+          "schema": [
+            { "id": "store", "displayName": "store", "required": false, "defaultMatch": true, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "address", "displayName": "address", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "lat", "displayName": "lat", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "long", "displayName": "long", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "distance_from_home_mi", "displayName": "distance_from_home_mi", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "est_trip_cost", "displayName": "est_trip_cost", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "channel", "displayName": "channel", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false },
+            { "id": "delivery_fee", "displayName": "delivery_fee", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true, "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [1168, 2140],
+      "id": "sheets-append-new-store-row",
+      "name": "Append New Store Row",
+      "notes": "New store, name only -- address/lat/long/distance/est_trip_cost/delivery_fee all start blank, matching how every other store row begins (address gets filled later via update_store_location v2's reverse-geocode, or by hand; distance_from_home_mi/est_trip_cost by the Recommendation Agent's geocoding chain once Settings.home_address is set). channel defaults to 'in-store' -- the common case for a store someone's adding while physically standing in it; an online-only channel row is still easiest to add by hand directly in the Sheet, same as today.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('List Webhook').first().json.body;\nreturn [{ json: { ok: true, store: body.store } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1392, 2140],
+      "id": "code-format-add-store-response",
+      "name": "Format Add Store Response"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.2,
+      "position": [1616, 2140],
+      "id": "respond-add-store",
+      "name": "Add Store Response"
     }
   ],
   "connections": {
@@ -2282,6 +2458,13 @@
         [
           {
             "node": "Find Store Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find Store Row for Add",
             "type": "main",
             "index": 0
           }
@@ -2601,6 +2784,68 @@
         [
           {
             "node": "Update Store Location Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Store Row for Add": {
+      "main": [
+        [
+          {
+            "node": "Store Already Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Already Exists?": {
+      "main": [
+        [
+          {
+            "node": "Store Already Exists Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append New Store Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Already Exists Error": {
+      "main": [
+        [
+          {
+            "node": "Add Store Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append New Store Row": {
+      "main": [
+        [
+          {
+            "node": "Format Add Store Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Add Store Response": {
+      "main": [
+        [
+          {
+            "node": "Add Store Response",
             "type": "main",
             "index": 0
           }
