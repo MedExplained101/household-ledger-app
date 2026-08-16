@@ -105,20 +105,34 @@ not a bug to clean up.
 The printer-ready user handout is a Claude Artifact (not a file in this
 repo) — currently at
 `https://claude.ai/code/artifact/7668c485-bcf9-44b5-8d15-6bf5f2ea0b5f`,
-titled "Tally — Handout". Whenever its content changes (not just a
-republish with no real edits), stamp the new version:
-- Every page's footer kicker reads `Tally · Rev YYYY-MM-DD` (see the
-  `.front-foot`/`.back-foot` blocks on all 4 pages) — use the date the
-  content changed, in the app's home timezone, not the git commit date if
-  those ever differ.
-- Bump all 4 footers together so a lone printed sheet is still
-  identifiable — physical pages get separated.
-- Update the same date in every footer; don't let pages drift to
-  different revs within one publish.
+titled "Tally — Handout". **Current version: v3** (2026-08-16). Whenever
+its content changes (not just a republish with no real edits):
+- Bump the integer version and stamp the new date. Every page's footer
+  kicker reads `Tally · vN · YYYY-MM-DD` (see the `.front-foot`/
+  `.back-foot` blocks on all 4 pages) — the date is when the content
+  changed, in the app's home timezone, not the git commit date if those
+  ever differ.
+- Update **this file** — bump "Current version" above — since the
+  artifact itself is the only other place the number lives; there's no
+  changelog to diff against otherwise.
+- Bump all 4 footers together to the same vN/date so a lone printed sheet
+  is still identifiable — physical pages get separated.
+- Version history so far: v1 — original handout, pre-Tally-rebrand.
+  v2 — republished 2026-08-12 with Tally branding + new URL. v3 —
+  2026-08-16, added the barcode "Log price only" mode and the Manage
+  Stores / store-locations feature (add store, use my location, overwrite
+  confirmation) to the copy; also fixed `.front-foot`'s bottom padding
+  (14px, same as its top) being too thin to survive a real printer's
+  unprintable edge margin — pages 1 & 4's footer text was getting clipped
+  on physical output. Now matches `.back-foot`'s 0.4in.
 - Republish to the same artifact URL (pass `url` to the Artifact tool) so
-  the link handed out to Graham/Rutendo never changes — only the visible
-  Rev date and the Artifact tool's own internal version history track
-  what changed.
+  the link handed out to Graham/Rutendo never changes.
+- Before publishing a content change, sanity-check print-edge safety —
+  copy the file into `public/` in this repo, view it through the Vite dev
+  server (`http://localhost:5173/<name>.html`), and confirm every page's
+  footer sits comfortably inside its sheet, not flush against the edge.
+  Delete the copy from `public/` again afterward; it's a throwaway check,
+  not something to ship or commit.
 
 ## Next steps as of last check-in
 1. Capture pack size/weight on future receipts (or via product photos) to
