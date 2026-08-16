@@ -101,6 +101,25 @@ not a bug to clean up.
 - Recommendation: build the PWA (web app hitting the n8n webhooks) before
   investing in a native mobile build — validates the pipeline first.
 
+## Handout versioning
+The printer-ready user handout is a Claude Artifact (not a file in this
+repo) — currently at
+`https://claude.ai/code/artifact/7668c485-bcf9-44b5-8d15-6bf5f2ea0b5f`,
+titled "Tally — Handout". Whenever its content changes (not just a
+republish with no real edits), stamp the new version:
+- Every page's footer kicker reads `Tally · Rev YYYY-MM-DD` (see the
+  `.front-foot`/`.back-foot` blocks on all 4 pages) — use the date the
+  content changed, in the app's home timezone, not the git commit date if
+  those ever differ.
+- Bump all 4 footers together so a lone printed sheet is still
+  identifiable — physical pages get separated.
+- Update the same date in every footer; don't let pages drift to
+  different revs within one publish.
+- Republish to the same artifact URL (pass `url` to the Artifact tool) so
+  the link handed out to Graham/Rutendo never changes — only the visible
+  Rev date and the Artifact tool's own internal version history track
+  what changed.
+
 ## Next steps as of last check-in
 1. Capture pack size/weight on future receipts (or via product photos) to
    fill in unit pricing — priority: meat (ground beef, ribs), where dollar
