@@ -329,4 +329,11 @@ Not yet reverified end-to-end after this third round of fixes on this feature �
 **This closes out the "resync checked-in JSON with live drift" item** flagged repeatedly across today's earlier entries — the checked-in file should now match the live workflow for all 11 actions.
 
 ---
+## Session log — 2026-08-15 (continued further still still): Geocoding API confirmed enabled
+
+**Resolved the last open unknown blocking `update_store_location`'s v2 (reverse-geocode-to-`address`) scope.** Checked the `HomeManager` Google Cloud project's Maps Platform "APIs & Services" page directly (console.cloud.google.com), filtering by Status: the "Disabled" filter returns zero results and "Enabled" returns the full product list — **every Maps Platform API, including Geocoding API, is enabled** on this project (not enabled API-by-API; looks like the whole suite was turned on together). This was the one fact blocking Feature 2's v2 scope (see the 2026-08-15 entries above) — the Google Maps credential ID was already confirmed (`jGUkE00XLHIOjbD4`, "Google Distance Matrix API", Query Auth), and now Geocoding API access is confirmed too.
+
+**Not yet built**: the actual reverse-geocode chain itself (an HTTP call to the Geocoding API from within `update_store_location`'s node chain, writing the resolved `address` back to the `Stores` row — never overwriting a manually-entered address, per the original handoff's rule). This is now unblocked and ready to scaffold/wire whenever picked up next.
+
+---
 *Add new items here as they come up, and check them off (or link a GitHub issue) as they're resolved — this keeps the doc useful instead of stale.*
