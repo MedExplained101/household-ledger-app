@@ -215,6 +215,52 @@
                 "conditions": [
                   {
                     "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "barcode",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Barcode"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
+                    "rightValue": "set_budget",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "SetBudget"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.action }}",
                     "rightValue": "log_price",
                     "operator": {
                       "type": "string",
@@ -596,7 +642,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Input 0..N-1: ShoppingList rows, last item: Settings row (merged combineAll puts them sequentially per input branch)\nconst listRows = $('Get Current List').all().map(i => i.json);\nconst settings = $('Get Settings').first().json;\nconst storeRows = $('Get Stores').all().map(i => i.json);\n\nconst total = listRows.reduce((sum, r) => sum + (Number(r.price) || 0) * (Number(r.qty) || 0), 0);\nconst budget = Number(settings.budget) || 0;\n\n// Delivery fees: charged once per distinct store on the list that has a nonzero\n// delivery_fee in the Stores tab -- flat fee only for v1, no free-delivery-above-$X\n// threshold modeling yet (see household-ledger-sheets-schema.md Stores tab note).\nconst storesUsed = [...new Set(listRows.map(r => r.store).filter(Boolean))];\nconst deliveryFees = storesUsed\n  .map(storeName => {\n    const match = storeRows.find(s => s.store === storeName);\n    return { store: storeName, fee: match ? Number(match.delivery_fee) || 0 : 0 };\n  })\n  .filter(d => d.fee > 0);\nconst deliveryTotal = Math.round(deliveryFees.reduce((sum, d) => sum + d.fee, 0) * 100) / 100;\nconst grandTotal = Math.round((total + deliveryTotal) * 100) / 100;\n\n// Voice commands: Validate Voice Command only ran for a voice-triggered request,\n// so this stays null for every other action -- never invents a reply.\nlet voiceReply = null;\ntry {\n  const v = $('Validate Voice Command').first().json;\n  if (v.intent === 'add') {\n    voiceReply = v.matchedCatalog\n      ? `Added ${v.item}${v.qty > 1 ? ` (x${v.qty})` : ''}.`\n      : `Couldn't find ${v.item} in the catalog \\u2014 try Browse Catalog or scan a receipt to add it with a real price.`;\n  } else if (v.intent === 'remove') {\n    voiceReply = `Removed ${v.item}.`;\n  } else if (v.intent === 'clear') {\n    voiceReply = 'Cleared the list.';\n  } else if (v.intent === 'finalize') {\n    voiceReply = 'List saved.';\n  } else if (v.intent === 'price_check') {\n    voiceReply = v.priceCheckReply || `No price found for ${v.item}.`;\n  } else {\n    voiceReply = \"Sorry, I didn't catch that \\u2014 try again.\";\n  }\n} catch (e) {}\n\nreturn [{\n  json: {\n    list: listRows,\n    total: Math.round(total * 100) / 100,\n    deliveryFees,\n    deliveryTotal,\n    grandTotal,\n    budget,\n    remaining: Math.round((budget - grandTotal) * 100) / 100,\n    cadence: settings.cadence,\n    stores: storeRows,\n    voiceReply\n  }\n}];"
+        "jsCode": "// Input 0..N-1: ShoppingList rows, last item: Settings row (merged combineAll puts them sequentially per input branch)\nconst listRows = $('Get Current List').all().map(i => i.json);\nconst settings = $('Get Settings').first().json;\nconst storeRows = $('Get Stores').all().map(i => i.json);\n\nconst total = listRows.reduce((sum, r) => sum + (Number(r.price) || 0) * (Number(r.qty) || 0), 0);\nconst budget = Number(settings.budget) || 0;\n\n// Delivery fees: charged once per distinct store on the list that has a nonzero\n// delivery_fee in the Stores tab -- flat fee only for v1, no free-delivery-above-$X\n// threshold modeling yet (see household-ledger-sheets-schema.md Stores tab note).\nconst storesUsed = [...new Set(listRows.map(r => r.store).filter(Boolean))];\nconst deliveryFees = storesUsed\n  .map(storeName => {\n    const match = storeRows.find(s => s.store === storeName);\n    return { store: storeName, fee: match ? Number(match.delivery_fee) || 0 : 0 };\n  })\n  .filter(d => d.fee > 0);\nconst deliveryTotal = Math.round(deliveryFees.reduce((sum, d) => sum + d.fee, 0) * 100) / 100;\nconst grandTotal = Math.round((total + deliveryTotal) * 100) / 100;\n\n// Voice commands: Validate Voice Command only ran for a voice-triggered request,\n// so this stays null for every other action -- never invents a reply.\nlet voiceReply = null;\ntry {\n  const v = $('Validate Voice Command').first().json;\n  if (v.intent === 'add') {\n    voiceReply = v.matchedCatalog\n      ? `Added ${v.item}${v.qty > 1 ? ` (x${v.qty})` : ''}.`\n      : `Couldn't find ${v.item} in the catalog \\u2014 try Browse Catalog or scan a receipt to add it with a real price.`;\n  } else if (v.intent === 'remove') {\n    voiceReply = `Removed ${v.item}.`;\n  } else if (v.intent === 'clear') {\n    voiceReply = 'Cleared the list.';\n  } else if (v.intent === 'finalize') {\n    voiceReply = 'List saved.';\n  } else if (v.intent === 'price_check') {\n    voiceReply = v.priceCheckReply || `No price found for ${v.item}.`;\n  } else {\n    voiceReply = \"Sorry, I didn't catch that \\u2014 try again.\";\n  }\n} catch (e) {}\n\nlet barcodeResult = null;\ntry {\n  if ($('List Webhook').first().json.body.action === 'barcode') {\n    try {\n      barcodeResult = $('Shape Catalog Barcode Result').first().json.barcodeResult;\n    } catch (e) {\n      barcodeResult = $('Shape External Barcode Result').first().json.barcodeResult;\n    }\n  }\n} catch (e) {}\n\nreturn [{\n  json: {\n    list: listRows,\n    total: Math.round(total * 100) / 100,\n    deliveryFees,\n    deliveryTotal,\n    grandTotal,\n    budget,\n    remaining: Math.round((budget - grandTotal) * 100) / 100,\n    cadence: settings.cadence,\n    stores: storeRows,\n    voiceReply, barcodeResult\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1429,6 +1475,155 @@
     },
     {
       "parameters": {
+        "documentId": { "__rl": true, "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Catalog", "mode": "name" },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [720, 1650],
+      "id": "sheets-get-catalog-for-barcode",
+      "name": "Get Catalog for Barcode",
+      "notes": "Live-drift resync (2026-08-15): reconstructed from the live workflow, which was built directly in n8n rather than scaffolded here first (see TODO.md's 2026-08-15 entries). Unfiltered read -- Match Barcode does the barcode comparison client-side over every Catalog row.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Matches the scanned barcode against real Catalog rows first -- instant, free,\n// trusted. Only falls back to an external lookup (Shape External Barcode Result)\n// when nothing here matches.\nconst barcode = String($('List Webhook').first().json.body.barcode || '').trim();\nconst rows = $input.all().map(i => i.json).filter(r => r.item && String(r.barcode || '').trim() === barcode);\nreturn [{ json: { barcode, matches: rows } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 1650],
+      "id": "code-match-barcode",
+      "name": "Match Barcode"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.matches.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1160, 1650],
+      "id": "if-barcode-matched",
+      "name": "Barcode Matched?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Real Catalog data -- trusted prices, no external call needed.\nconst barcode = $json.barcode;\nconst rows = $json.matches;\nconst item = rows[0]?.item || null;\nconst offers = rows.map(r => ({ store: r.store, price: Number(r.price) }))\n  .sort((a, b) => a.price - b.price);\nreturn [{ json: { barcodeResult: {\n  source: 'catalog',\n  matchedCatalog: true,\n  barcode,\n  item,\n  offers\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1380, 1500],
+      "id": "code-shape-catalog-barcode-result",
+      "name": "Shape Catalog Barcode Result"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.upcitemdb.com/prod/trial/lookup?upc={{ $json.barcode }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "onError": "continueRegularOutput",
+      "position": [1380, 1800],
+      "id": "http-lookup-barcode-upcitemdb",
+      "name": "Lookup Barcode via UPCitemdb",
+      "notes": "UPCitemdb trial tier: no API key, ~100 lookups/day, coverage inconsistent -- treated as unverified/live data downstream (see Shape External Barcode Result), never merged into Catalog automatically."
+    },
+    {
+      "parameters": {
+        "jsCode": "// UPCitemdb trial tier: no key, ~100 lookups/day, coverage inconsistent -- treat as\n// unverified/live data, never merge into Catalog automatically (no write-back).\nconst barcode = $('Match Barcode').first().json.barcode;\nlet item = null;\nlet offers = [];\nlet found = false;\ntry {\n  const body = $json;\n  const rec = body.items && body.items[0];\n  if (rec) {\n    found = true;\n    item = rec.title || rec.brand || null;\n    offers = (rec.offers || [])\n      .filter((o) => o.price)\n      .map((o) => ({ store: o.merchant || 'Unknown seller', price: Number(o.price) }))\n      .sort((a, b) => a.price - b.price);\n  }\n} catch (e) {}\nreturn [{ json: { barcodeResult: {\n  source: 'external',\n  matchedCatalog: false,\n  barcode,\n  item,\n  offers,\n  found\n} } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1600, 1800],
+      "id": "code-shape-external-barcode-result",
+      "name": "Shape External Barcode Result"
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Settings", "mode": "name" },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [720, 2000],
+      "id": "sheets-get-settings-for-budget-update",
+      "name": "Get Settings for Budget Update",
+      "notes": "Live-drift resync (2026-08-15): reconstructed from the live workflow (see TODO.md's 2026-08-15 entries). Unfiltered read of the single-row Settings tab.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Settings", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "budget": "={{ $('List Webhook').first().json.body.budget }}",
+            "cadence": "={{ $json.cadence }}",
+            "CheckIn_Status": "={{ $json.CheckIn_Status }}",
+            "CheckIn_ResumeURL": "={{ $json.CheckIn_ResumeURL }}",
+            "home_address": "={{ $json.home_address }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "onError": "continueRegularOutput",
+      "position": [940, 2000],
+      "id": "sheets-update-settings-budget",
+      "name": "Update Settings Budget",
+      "notes": "Writes budget from the request body; every other Settings column is written back unchanged from the row just read (Get Settings for Budget Update), since Update Row overwrites every mapped column. On Error: Continue so a write hiccup here still lets the shared Get Current List/Get Settings response path run.",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zz9INbfV79dYEmQl",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
         "documentId": {
           "__rl": true,
           "value": "1sPxqWNLfs5bT7hSJBgjwTdwJVx7l01D9VQXmKNB5-5Y",
@@ -1912,6 +2107,20 @@
         ],
         [
           {
+            "node": "Get Catalog for Barcode",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Settings for Budget Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Find Catalog Row for Log Price",
             "type": "main",
             "index": 0
@@ -1920,6 +2129,116 @@
         [
           {
             "node": "Find Store Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Catalog for Barcode": {
+      "main": [
+        [
+          {
+            "node": "Match Barcode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Barcode": {
+      "main": [
+        [
+          {
+            "node": "Barcode Matched?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Barcode Matched?": {
+      "main": [
+        [
+          {
+            "node": "Shape Catalog Barcode Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lookup Barcode via UPCitemdb",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Catalog Barcode Result": {
+      "main": [
+        [
+          {
+            "node": "Get Current List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Barcode via UPCitemdb": {
+      "main": [
+        [
+          {
+            "node": "Shape External Barcode Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape External Barcode Result": {
+      "main": [
+        [
+          {
+            "node": "Get Current List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Settings for Budget Update": {
+      "main": [
+        [
+          {
+            "node": "Update Settings Budget",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Settings Budget": {
+      "main": [
+        [
+          {
+            "node": "Get Current List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Settings",
             "type": "main",
             "index": 0
           }
@@ -2017,6 +2336,11 @@
             "node": "Update Store Row",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Format Update Store Location Response",
+            "type": "main",
+            "index": 0
           }
         ],
         [
@@ -2033,17 +2357,6 @@
         [
           {
             "node": "Update Store Location Error Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Update Store Row": {
-      "main": [
-        [
-          {
-            "node": "Format Update Store Location Response",
             "type": "main",
             "index": 0
           }
